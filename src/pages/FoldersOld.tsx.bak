@@ -1,0 +1,1035 @@
+import { useState } from "react";
+import {
+  FolderOpen,
+  FolderClosed,
+  ChevronRight,
+  ChevronDown,
+  Plus,
+  FileText,
+  MoreHorizontal,
+  Pencil,
+  Trash2,
+  Move,
+  Shield,
+  Users,
+  Lock,
+  FolderPlus,
+  Search,
+  Grid3x3,
+  List,
+  Star,
+  Download,
+  Share2,
+  Eye,
+  Image,
+  FileSpreadsheet,
+  File,
+  Home,
+  X,
+} from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+
+interface FolderNode {
+  id: string;
+  name: string;
+  count: number;
+  owner: string;
+  createdAt: string;
+  permissions: "private" | "shared" | "public";
+  children?: FolderNode[];
+  documents?: Document[];
+}
+
+interface Document {
+  id: number;
+  name: string;
+  type: string;
+  size: string;
+  date: string;
+  owner: string;
+  favorite: boolean;
+}
+
+const mockFolderTree: FolderNode[] = [
+  {
+    id: "1",
+    name: "Direction Générale",
+    count: 45,
+    owner: "Marie Kone",
+    createdAt: "2024-01-15",
+    permissions: "shared",
+    documents: [
+      { id: 1, name: "Rapport_Annuel_2023.pdf", type: "PDF", size: "2.4 MB", date: "2024-02-10", owner: "Marie Kone", favorite: true },
+      { id: 2, name: "Budget_2024.xlsx", type: "Excel", size: "1.2 MB", date: "2024-02-09", owner: "Ahmed Diallo", favorite: false },
+    ],
+    children: [
+      {
+        id: "1a",
+        name: "Procès-verbaux",
+        count: 12,
+        owner: "Marie Kone",
+        createdAt: "2024-01-20",
+        permissions: "private",
+        documents: [
+          { id: 3, name: "PV_Reunion_Jan.docx", type: "Word", size: "158 KB", date: "2024-01-25", owner: "Marie Kone", favorite: false },
+        ],
+      },
+      {
+        id: "1b",
+        name: "Rapports annuels",
+        count: 8,
+        owner: "Ahmed Diallo",
+        createdAt: "2024-01-18",
+        permissions: "shared",
+        documents: [],
+      },
+      {
+        id: "1c",
+        name: "Notes de service",
+        count: 25,
+        owner: "Fatou Sow",
+        createdAt: "2024-01-22",
+        permissions: "public",
+        documents: [],
+      },
+    ],
+  },
+  {
+    id: "2",
+    name: "Finance",
+    count: 89,
+    owner: "Ibrahim Keita",
+    createdAt: "2024-01-10",
+    permissions: "private",
+    documents: [],
+    children: [
+      {
+        id: "2a",
+        name: "Factures",
+        count: 45,
+        owner: "Ibrahim Keita",
+        createdAt: "2024-01-12",
+        permissions: "shared",
+        documents: [],
+      },
+      {
+        id: "2b",
+        name: "Budgets",
+        count: 12,
+        owner: "Ahmed Diallo",
+        createdAt: "2024-01-14",
+        permissions: "private",
+        documents: [],
+      },
+      {
+        id: "2c",
+        name: "Rapports financiers",
+        count: 32,
+        owner: "Ibrahim Keita",
+        createdAt: "2024-01-16",
+        permissions: "shared",
+        documents: [],
+        children: [
+          {
+            id: "2c1",
+            name: "Q1 2024",
+            count: 8,
+            owner: "Ibrahim Keita",
+            createdAt: "2024-02-01",
+            permissions: "shared",
+            documents: [],
+          },
+        ],
+      },
+    ],
+  },
+  {
+    id: "3",
+    name: "Ressources Humaines",
+    count: 67,
+    owner: "Fatou Sow",
+    createdAt: "2024-01-08",
+    permissions: "shared",
+    documents: [],
+    children: [
+      {
+        id: "3a",
+        name: "Contrats",
+        count: 34,
+        owner: "Fatou Sow",
+        createdAt: "2024-01-10",
+        permissions: "private",
+        documents: [],
+      },
+      {
+        id: "3b",
+        name: "Fiches de paie",
+        count: 22,
+        owner: "Fatou Sow",
+        createdAt: "2024-01-11",
+        permissions: "private",
+        documents: [],
+      },
+      {
+        id: "3c",
+        name: "Formations",
+        count: 11,
+        owner: "Marie Kone",
+        createdAt: "2024-01-13",
+        permissions: "public",
+        documents: [],
+      },
+    ],
+  },
+  {
+    id: "4",
+    name: "Juridique",
+    count: 34,
+    owner: "Youssouf Traore",
+    createdAt: "2024-01-05",
+    permissions: "private",
+    documents: [],
+  },
+  {
+    id: "5",
+    name: "Communication",
+    count: 23,
+    owner: "Marie Kone",
+    createdAt: "2024-01-12",
+    permissions: "public",
+    documents: [],
+  },
+  {
+    id: "6",
+    name: "Projets",
+    count: 56,
+    owner: "Ahmed Diallo",
+    createdAt: "2024-01-07",
+    permissions: "shared",
+    documents: [],
+  },
+];
+
+function getTypeIcon(type: string) {
+  const iconProps = "h-5 w-5";
+  switch (type) {
+    case "PDF":
+      return <FileText className={`${iconProps} text-destructive`} />;
+    case "Word":
+      return <File className={`${iconProps} text-info`} />;
+    case "Excel":
+      return <FileSpreadsheet className={`${iconProps} text-success`} />;
+    case "Image":
+      return <Image className={`${iconProps} text-warning`} />;
+    default:
+      return <FileText className={`${iconProps} text-muted-foreground`} />;
+  }
+}
+
+function getPermissionIcon(permission: string) {
+  switch (permission) {
+    case "private":
+      return <Lock className="h-3.5 w-3.5 text-destructive" />;
+    case "shared":
+      return <Users className="h-3.5 w-3.5 text-info" />;
+    case "public":
+      return <Shield className="h-3.5 w-3.5 text-success" />;
+    default:
+      return null;
+  }
+}
+
+function getPermissionText(permission: string) {
+  switch (permission) {
+    case "private":
+      return "Privé";
+    case "shared":
+      return "Partagé";
+    case "public":
+      return "Public";
+    default:
+      return "";
+  }
+}
+
+interface FolderItemProps {
+  folder: FolderNode;
+  level: number;
+  expanded: Set<string>;
+  selected: string | null;
+  onToggle: (id: string) => void;
+  onSelect: (folder: FolderNode) => void;
+  onRename: (folder: FolderNode) => void;
+  onDelete: (folder: FolderNode) => void;
+  onMove: (folder: FolderNode) => void;
+  onPermissions: (folder: FolderNode) => void;
+}
+
+function FolderItem({
+  folder,
+  level,
+  expanded,
+  selected,
+  onToggle,
+  onSelect,
+  onRename,
+  onDelete,
+  onMove,
+  onPermissions,
+}: FolderItemProps) {
+  const isExpanded = expanded.has(folder.id);
+  const isSelected = selected === folder.id;
+  const hasChildren = folder.children && folder.children.length > 0;
+
+  return (
+    <div>
+      <div
+        className={`flex items-center gap-1.5 p-1.5 rounded-lg cursor-pointer transition-colors group ${
+          isSelected ? "bg-primary/10 text-primary" : "hover:bg-muted/50"
+        }`}
+        style={{ paddingLeft: `${level * 12 + 6}px` }}
+      >
+        <button
+          onClick={() => hasChildren && onToggle(folder.id)}
+          className={`p-0.5 hover:bg-muted rounded transition-colors ${
+            !hasChildren && "invisible"
+          }`}
+        >
+          {isExpanded ? (
+            <ChevronDown className="h-3.5 w-3.5" />
+          ) : (
+            <ChevronRight className="h-3.5 w-3.5" />
+          )}
+        </button>
+
+        <div className="flex items-center gap-2 flex-1 min-w-0" onClick={() => onSelect(folder)}>
+          {isExpanded ? (
+            <FolderOpen className="h-4 w-4 shrink-0" />
+          ) : (
+            <FolderClosed className="h-4 w-4 shrink-0" />
+          )}
+          <span className="text-sm font-medium truncate flex-1">{folder.name}</span>
+          <span className="text-xs text-muted-foreground shrink-0">({folder.count})</span>
+          {getPermissionIcon(folder.permissions)}
+        </div>
+
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+            <button className="p-1 opacity-0 group-hover:opacity-100 hover:bg-muted rounded transition-all">
+              <MoreHorizontal className="h-3.5 w-3.5" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-44">
+            <DropdownMenuItem onClick={() => onRename(folder)}>
+              <Pencil className="h-4 w-4 mr-2" /> Renommer
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => onMove(folder)}>
+              <Move className="h-4 w-4 mr-2" /> Déplacer
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => onPermissions(folder)}>
+              <Shield className="h-4 w-4 mr-2" /> Permissions
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => onDelete(folder)} className="text-destructive">
+              <Trash2 className="h-4 w-4 mr-2" /> Supprimer
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+
+      <AnimatePresence>
+        {isExpanded && hasChildren && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.2 }}
+          >
+            {folder.children!.map((child) => (
+              <FolderItem
+                key={child.id}
+                folder={child}
+                level={level + 1}
+                expanded={expanded}
+                selected={selected}
+                onToggle={onToggle}
+                onSelect={onSelect}
+                onRename={onRename}
+                onDelete={onDelete}
+                onMove={onMove}
+                onPermissions={onPermissions}
+              />
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+export default function Folders() {
+  const [expanded, setExpanded] = useState<Set<string>>(new Set(["1", "2"]));
+  const [selected, setSelected] = useState<FolderNode | null>(mockFolderTree[0]);
+  const [view, setView] = useState<"grid" | "list">("grid");
+  const [searchQuery, setSearchQuery] = useState("");
+
+  // Dialogs state
+  const [createDialog, setCreateDialog] = useState(false);
+  const [renameFolder, setRenameFolder] = useState<FolderNode | null>(null);
+  const [deleteFolder, setDeleteFolder] = useState<FolderNode | null>(null);
+  const [moveFolder, setMoveFolder] = useState<FolderNode | null>(null);
+  const [permissionsFolder, setPermissionsFolder] = useState<FolderNode | null>(null);
+
+  // Form state
+  const [newFolderName, setNewFolderName] = useState("");
+  const [newFolderPermission, setNewFolderPermission] = useState<"private" | "shared" | "public">("private");
+  const [targetFolderId, setTargetFolderId] = useState<string>("");
+
+  const toggle = (id: string) => {
+    const next = new Set(expanded);
+    next.has(id) ? next.delete(id) : next.add(id);
+    setExpanded(next);
+  };
+
+  const buildBreadcrumb = (folder: FolderNode | null): FolderNode[] => {
+    if (!folder) return [];
+    
+    const findPath = (nodes: FolderNode[], targetId: string, path: FolderNode[] = []): FolderNode[] | null => {
+      for (const node of nodes) {
+        const currentPath = [...path, node];
+        if (node.id === targetId) return currentPath;
+        if (node.children) {
+          const found = findPath(node.children, targetId, currentPath);
+          if (found) return found;
+        }
+      }
+      return null;
+    };
+
+    return findPath(mockFolderTree, folder.id) || [folder];
+  };
+
+  const breadcrumb = buildBreadcrumb(selected);
+
+  const getAllFolders = (nodes: FolderNode[]): FolderNode[] => {
+    let result: FolderNode[] = [];
+    nodes.forEach((node) => {
+      result.push(node);
+      if (node.children) {
+        result = [...result, ...getAllFolders(node.children)];
+      }
+    });
+    return result;
+  };
+
+  const allFolders = getAllFolders(mockFolderTree);
+
+  const handleCreateFolder = () => {
+    console.log("Create folder:", newFolderName, "in", selected?.name, "with permission", newFolderPermission);
+    setCreateDialog(false);
+    setNewFolderName("");
+    setNewFolderPermission("private");
+  };
+
+  const handleRename = () => {
+    console.log("Rename folder:", renameFolder?.name, "to", newFolderName);
+    setRenameFolder(null);
+    setNewFolderName("");
+  };
+
+  const handleDelete = () => {
+    console.log("Delete folder:", deleteFolder?.name);
+    setDeleteFolder(null);
+  };
+
+  const handleMove = () => {
+    console.log("Move folder:", moveFolder?.name, "to", targetFolderId);
+    setMoveFolder(null);
+    setTargetFolderId("");
+  };
+
+  const handlePermissions = () => {
+    console.log("Update permissions for:", permissionsFolder?.name, "to", newFolderPermission);
+    setPermissionsFolder(null);
+  };
+
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-5">
+      {/* Header */}
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h1 className="text-2xl font-bold flex items-center gap-2">
+            <FolderOpen className="h-7 w-7 text-primary" />
+            Gestion des dossiers
+          </h1>
+          <p className="text-muted-foreground text-sm">
+            Organisez vos documents en arborescence infinie
+          </p>
+        </div>
+        <Button onClick={() => setCreateDialog(true)}>
+          <FolderPlus className="h-4 w-4 mr-2" />
+          Nouveau dossier
+        </Button>
+      </div>
+
+      {/* Stats */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="stat-card">
+          <p className="text-sm text-muted-foreground">Total dossiers</p>
+          <p className="text-2xl font-bold mt-1">23</p>
+        </div>
+        <div className="stat-card">
+          <p className="text-sm text-muted-foreground">Dossiers partagés</p>
+          <p className="text-2xl font-bold mt-1 text-info">12</p>
+        </div>
+        <div className="stat-card">
+          <p className="text-sm text-muted-foreground">Dossiers privés</p>
+          <p className="text-2xl font-bold mt-1 text-destructive">8</p>
+        </div>
+        <div className="stat-card">
+          <p className="text-sm text-muted-foreground">Total documents</p>
+          <p className="text-2xl font-bold mt-1 text-success">414</p>
+        </div>
+      </div>
+
+      {/* Main Content */}
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-5">
+        {/* Tree Sidebar */}
+        <div className="lg:col-span-1">
+          <div className="stat-card sticky top-5">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-semibold">Arborescence</h3>
+              <Button variant="ghost" size="sm" onClick={() => setExpanded(new Set())}>
+                <X className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+            <div className="space-y-0.5 max-h-[600px] overflow-y-auto pr-2">
+              <div
+                className={`flex items-center gap-2 p-1.5 rounded-lg cursor-pointer transition-colors ${
+                  selected === null ? "bg-primary/10 text-primary" : "hover:bg-muted/50"
+                }`}
+                onClick={() => setSelected(null)}
+              >
+                <Home className="h-4 w-4 shrink-0" />
+                <span className="text-sm font-medium">Racine</span>
+              </div>
+              {mockFolderTree.map((folder) => (
+                <FolderItem
+                  key={folder.id}
+                  folder={folder}
+                  level={0}
+                  expanded={expanded}
+                  selected={selected?.id || null}
+                  onToggle={toggle}
+                  onSelect={setSelected}
+                  onRename={setRenameFolder}
+                  onDelete={setDeleteFolder}
+                  onMove={setMoveFolder}
+                  onPermissions={setPermissionsFolder}
+                />
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Content Area */}
+        <div className="lg:col-span-3 space-y-4">
+          {/* Breadcrumb & Actions */}
+          <div className="stat-card">
+            <div className="flex items-center justify-between flex-wrap gap-3">
+              <div className="flex items-center gap-2 text-sm flex-wrap">
+                <Home className="h-4 w-4 text-muted-foreground" />
+                <ChevronRight className="h-3 w-3 text-muted-foreground" />
+                {breadcrumb.map((folder, idx) => (
+                  <div key={folder.id} className="flex items-center gap-2">
+                    <button
+                      onClick={() => setSelected(folder)}
+                      className="hover:text-primary transition-colors"
+                    >
+                      {folder.name}
+                    </button>
+                    {idx < breadcrumb.length - 1 && (
+                      <ChevronRight className="h-3 w-3 text-muted-foreground" />
+                    )}
+                  </div>
+                ))}
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant={view === "grid" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setView("grid")}
+                >
+                  <Grid3x3 className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant={view === "list" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setView("list")}
+                >
+                  <List className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+
+            {/* Search */}
+            <div className="mt-3">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Rechercher dans ce dossier..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-9"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Folder Info */}
+          {selected && (
+            <div className="stat-card">
+              <div className="flex items-start justify-between">
+                <div className="flex items-start gap-3">
+                  <div className="p-3 rounded-lg bg-primary/10">
+                    <FolderOpen className="h-6 w-6 text-primary" />
+                  </div>
+                  <div>
+                    <h2 className="font-semibold text-lg">{selected.name}</h2>
+                    <div className="flex items-center gap-4 mt-2 text-sm text-muted-foreground">
+                      <span className="flex items-center gap-1">
+                        <FileText className="h-3.5 w-3.5" />
+                        {selected.count} documents
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <Users className="h-3.5 w-3.5" />
+                        {selected.owner}
+                      </span>
+                      <span className="flex items-center gap-1">
+                        {getPermissionIcon(selected.permissions)}
+                        {getPermissionText(selected.permissions)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm">
+                      <MoreHorizontal className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-44">
+                    <DropdownMenuItem onClick={() => setRenameFolder(selected)}>
+                      <Pencil className="h-4 w-4 mr-2" /> Renommer
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setMoveFolder(selected)}>
+                      <Move className="h-4 w-4 mr-2" /> Déplacer
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setPermissionsFolder(selected)}>
+                      <Shield className="h-4 w-4 mr-2" /> Permissions
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={() => setDeleteFolder(selected)} className="text-destructive">
+                      <Trash2 className="h-4 w-4 mr-2" /> Supprimer
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            </div>
+          )}
+
+          {/* Sub-folders */}
+          {selected?.children && selected.children.length > 0 && (
+            <div className="stat-card">
+              <h3 className="font-semibold mb-3">Sous-dossiers</h3>
+              <div
+                className={
+                  view === "grid"
+                    ? "grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3"
+                    : "space-y-2"
+                }
+              >
+                {selected.children.map((folder) => (
+                  <div
+                    key={folder.id}
+                    onClick={() => setSelected(folder)}
+                    className="flex items-center gap-3 p-3 rounded-lg border border-border hover:border-primary hover:bg-primary/5 transition-all cursor-pointer"
+                  >
+                    <div className="p-2.5 rounded-lg bg-primary/10">
+                      <FolderClosed className="h-5 w-5 text-primary" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-sm truncate">{folder.name}</p>
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className="text-xs text-muted-foreground">{folder.count} docs</span>
+                        {getPermissionIcon(folder.permissions)}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Documents in folder */}
+          {selected?.documents && selected.documents.length > 0 && (
+            <div className="stat-card">
+              <h3 className="font-semibold mb-3">Documents</h3>
+              {view === "grid" ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+                  {selected.documents.map((doc) => (
+                    <div
+                      key={doc.id}
+                      className="p-3 rounded-lg border border-border hover:border-primary hover:bg-primary/5 transition-all cursor-pointer"
+                    >
+                      <div className="flex items-start justify-between mb-2">
+                        <div className="p-2.5 rounded-lg bg-muted">{getTypeIcon(doc.type)}</div>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <button className="p-1 hover:bg-muted rounded transition-colors">
+                              <MoreHorizontal className="h-4 w-4" />
+                            </button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem>
+                              <Eye className="h-4 w-4 mr-2" /> Aperçu
+                            </DropdownMenuItem>
+                            <DropdownMenuItem>
+                              <Download className="h-4 w-4 mr-2" /> Télécharger
+                            </DropdownMenuItem>
+                            <DropdownMenuItem>
+                              <Share2 className="h-4 w-4 mr-2" /> Partager
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                      <p className="font-medium text-sm truncate mb-1">{doc.name}</p>
+                      <div className="flex items-center justify-between text-xs text-muted-foreground">
+                        <span>{doc.size}</span>
+                        {doc.favorite && <Star className="h-3 w-3 text-warning fill-warning" />}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {selected.documents.map((doc) => (
+                    <div
+                      key={doc.id}
+                      className="flex items-center gap-3 p-3 rounded-lg hover:bg-muted/30 transition-colors"
+                    >
+                      <div className="p-2 rounded-lg bg-muted">{getTypeIcon(doc.type)}</div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-sm truncate">{doc.name}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {doc.type} · {doc.size} · {doc.date}
+                        </p>
+                      </div>
+                      {doc.favorite && <Star className="h-4 w-4 text-warning fill-warning" />}
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <button className="p-1 hover:bg-muted rounded transition-colors">
+                            <MoreHorizontal className="h-4 w-4" />
+                          </button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem>
+                            <Eye className="h-4 w-4 mr-2" /> Aperçu
+                          </DropdownMenuItem>
+                          <DropdownMenuItem>
+                            <Download className="h-4 w-4 mr-2" /> Télécharger
+                          </DropdownMenuItem>
+                          <DropdownMenuItem>
+                            <Share2 className="h-4 w-4 mr-2" /> Partager
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Empty state */}
+          {selected && (!selected.children || selected.children.length === 0) && (!selected.documents || selected.documents.length === 0) && (
+            <div className="stat-card text-center py-12">
+              <FolderOpen className="h-12 w-12 text-muted-foreground mx-auto mb-3" />
+              <h3 className="font-semibold text-lg mb-1">Dossier vide</h3>
+              <p className="text-sm text-muted-foreground">
+                Ce dossier ne contient aucun document ni sous-dossier
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Create Folder Dialog */}
+      <Dialog open={createDialog} onOpenChange={setCreateDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Créer un nouveau dossier</DialogTitle>
+            <DialogDescription>
+              Le dossier sera créé dans{" "}
+              {selected ? `"${selected.name}"` : "la racine"}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div>
+              <label className="text-sm font-medium mb-1.5 block">Nom du dossier</label>
+              <Input
+                placeholder="Ex: Rapports 2024"
+                value={newFolderName}
+                onChange={(e) => setNewFolderName(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium mb-1.5 block">Permissions</label>
+              <Select
+                value={newFolderPermission}
+                onValueChange={(v) => setNewFolderPermission(v as any)}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="private">
+                    <div className="flex items-center gap-2">
+                      <Lock className="h-4 w-4 text-destructive" />
+                      Privé - Visible uniquement par vous
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="shared">
+                    <div className="flex items-center gap-2">
+                      <Users className="h-4 w-4 text-info" />
+                      Partagé - Accessible à certains utilisateurs
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="public">
+                    <div className="flex items-center gap-2">
+                      <Shield className="h-4 w-4 text-success" />
+                      Public - Accessible à tous
+                    </div>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setCreateDialog(false)}>
+              Annuler
+            </Button>
+            <Button onClick={handleCreateFolder} disabled={!newFolderName.trim()}>
+              <FolderPlus className="h-4 w-4 mr-2" />
+              Créer
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Rename Dialog */}
+      <Dialog open={!!renameFolder} onOpenChange={() => setRenameFolder(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Renommer le dossier</DialogTitle>
+            <DialogDescription>
+              Modifier le nom de "{renameFolder?.name}"
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <label className="text-sm font-medium mb-1.5 block">Nouveau nom</label>
+            <Input
+              placeholder="Nouveau nom du dossier"
+              defaultValue={renameFolder?.name}
+              value={newFolderName}
+              onChange={(e) => setNewFolderName(e.target.value)}
+            />
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setRenameFolder(null)}>
+              Annuler
+            </Button>
+            <Button onClick={handleRename} disabled={!newFolderName.trim()}>
+              <Pencil className="h-4 w-4 mr-2" />
+              Renommer
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Dialog */}
+      <Dialog open={!!deleteFolder} onOpenChange={() => setDeleteFolder(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Supprimer le dossier</DialogTitle>
+            <DialogDescription>
+              Êtes-vous sûr de vouloir supprimer "{deleteFolder?.name}" ?
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <div className="p-4 bg-destructive/10 border border-destructive/20 rounded-lg">
+              <p className="text-sm text-destructive font-medium">⚠️ Attention</p>
+              <p className="text-sm text-muted-foreground mt-1">
+                Cette action supprimera le dossier ainsi que tous ses sous-dossiers et
+                documents ({deleteFolder?.count} documents). Cette action est irréversible.
+              </p>
+            </div>
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setDeleteFolder(null)}>
+              Annuler
+            </Button>
+            <Button variant="destructive" onClick={handleDelete}>
+              <Trash2 className="h-4 w-4 mr-2" />
+              Supprimer définitivement
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Move Dialog */}
+      <Dialog open={!!moveFolder} onOpenChange={() => setMoveFolder(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Déplacer le dossier</DialogTitle>
+            <DialogDescription>
+              Sélectionnez la destination pour "{moveFolder?.name}"
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <label className="text-sm font-medium mb-1.5 block">Dossier de destination</label>
+            <Select value={targetFolderId} onValueChange={setTargetFolderId}>
+              <SelectTrigger>
+                <SelectValue placeholder="Choisir un dossier..." />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="root">
+                  <div className="flex items-center gap-2">
+                    <Home className="h-4 w-4" />
+                    Racine
+                  </div>
+                </SelectItem>
+                {allFolders
+                  .filter((f) => f.id !== moveFolder?.id)
+                  .map((folder) => (
+                    <SelectItem key={folder.id} value={folder.id}>
+                      <div className="flex items-center gap-2">
+                        <FolderClosed className="h-4 w-4" />
+                        {folder.name}
+                      </div>
+                    </SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setMoveFolder(null)}>
+              Annuler
+            </Button>
+            <Button onClick={handleMove} disabled={!targetFolderId}>
+              <Move className="h-4 w-4 mr-2" />
+              Déplacer
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Permissions Dialog */}
+      <Dialog open={!!permissionsFolder} onOpenChange={() => setPermissionsFolder(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Gérer les permissions</DialogTitle>
+            <DialogDescription>
+              Modifier les permissions de "{permissionsFolder?.name}"
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div>
+              <label className="text-sm font-medium mb-1.5 block">Niveau d'accès</label>
+              <Select
+                defaultValue={permissionsFolder?.permissions}
+                onValueChange={(v) => setNewFolderPermission(v as any)}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="private">
+                    <div className="flex items-center gap-2">
+                      <Lock className="h-4 w-4 text-destructive" />
+                      <div>
+                        <p className="font-medium">Privé</p>
+                        <p className="text-xs text-muted-foreground">
+                          Visible uniquement par vous
+                        </p>
+                      </div>
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="shared">
+                    <div className="flex items-center gap-2">
+                      <Users className="h-4 w-4 text-info" />
+                      <div>
+                        <p className="font-medium">Partagé</p>
+                        <p className="text-xs text-muted-foreground">
+                          Accessible à certains utilisateurs
+                        </p>
+                      </div>
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="public">
+                    <div className="flex items-center gap-2">
+                      <Shield className="h-4 w-4 text-success" />
+                      <div>
+                        <p className="font-medium">Public</p>
+                        <p className="text-xs text-muted-foreground">Accessible à tous</p>
+                      </div>
+                    </div>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {permissionsFolder?.permissions === "shared" && (
+              <div className="p-3 bg-muted rounded-lg">
+                <p className="text-sm font-medium mb-2">Utilisateurs avec accès</p>
+                <div className="space-y-2">
+                  {["Marie Kone", "Ahmed Diallo", "Fatou Sow"].map((user) => (
+                    <div key={user} className="flex items-center justify-between text-sm">
+                      <span>{user}</span>
+                      <span className="text-xs text-muted-foreground">Lecture/Écriture</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setPermissionsFolder(null)}>
+              Annuler
+            </Button>
+            <Button onClick={handlePermissions}>
+              <Shield className="h-4 w-4 mr-2" />
+              Enregistrer
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </motion.div>
+  );
+}

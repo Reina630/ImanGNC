@@ -1,0 +1,53 @@
+/* Styles pour l'aperçu des documents Word */
+.docx-preview {
+  font-family: 'Calibri', 'Arial', sans-serif;
+  line-height: 1.6;
+}
+
+.docx-preview p {
+  margin-bottom: 0.5rem;
+}
+
+.docx-preview h1,
+.docx-preview h2,
+.docx-preview h3,
+.docx-preview h4,
+.docx-preview h5,
+.docx-preview h6 {
+  margin-top: 1rem;
+  margin-bottom: 0.5rem;
+  font-weight: 600;
+}
+
+/* Styles pour l'aperçu des feuilles Excel */
+.excel-preview table {
+  border-collapse: collapse;
+  width: 100%;
+  margin-bottom: 1rem;
+  font-size: 11px;
+}
+
+.excel-preview th,
+.excel-preview td {
+  border: 1px solid #ddd;
+  padding: 6px 8px;
+  text-align: left;
+}
+
+.excel-preview th {
+  background-color: #f3f4f6;
+  font-weight: 600;
+}
+
+.excel-preview tr:nth-child(even) {
+  background-color: #f9fafb;
+}
+
+.excel-preview tr:hover {
+  background-color: #f1f5f9;
+}
+
+/* Amélioration des numéros de cellules */
+.excel-preview td[data-v] {
+  white-space: nowrap;
+}
