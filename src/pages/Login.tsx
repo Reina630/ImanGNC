@@ -34,7 +34,13 @@ export default function Login() {
         description: "Bienvenue dans votre espace documentaire",
       });
       
-      navigate(from, { replace: true });
+      // Détecter si mobile et rediriger vers l'interface mobile
+      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+        navigator.userAgent
+      ) || window.innerWidth < 768;
+      
+      const destination = isMobile ? "/mobile-scan" : from;
+      navigate(destination, { replace: true });
     } catch (err: any) {
       const errorMessage = err.response?.data?.error || 
                           err.response?.data?.detail || 

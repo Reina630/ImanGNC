@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
+import { MobileRedirect } from "@/components/MobileRedirect";
 import AppLayout from "@/components/layout/AppLayout";
 import Dashboard from "./pages/Dashboard";
 import Documents from "./pages/Documents";
@@ -15,6 +16,7 @@ import SharesPage from "./pages/SharesPage";
 import Favorites from "./pages/Favorites";
 import VersionHistory from "./pages/VersionHistory";
 import ScanPage from "./pages/ScanPage";
+import MobileScanPage from "./pages/MobileScanPage";
 import AdminPanel from "./pages/AdminPanel";
 import SettingsPage from "./pages/SettingsPage";
 import RegistreCourrierPage from "./pages/RegistreCourrierPage";
@@ -37,10 +39,18 @@ const App = () => (
       <Sonner />
       <BrowserRouter basename="/ImanGNC">
         <AuthProvider>
+          <MobileRedirect />
           <Routes>
             {/* Auth pages - no layout */}
             <Route path="/login" element={<Login />} />
             <Route path="/forgot-password" element={<ForgotPassword />} />
+
+            {/* Mobile scan interface - no layout */}
+            <Route path="/mobile-scan" element={
+              <ProtectedRoute>
+                <MobileScanPage />
+              </ProtectedRoute>
+            } />
 
             {/* App pages - with layout and protection */}
             <Route element={
