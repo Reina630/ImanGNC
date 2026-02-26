@@ -35,7 +35,7 @@ const App = () => (
     <TooltipProvider>
       <Toaster />
       <Sonner />
-      <BrowserRouter>
+      <BrowserRouter basename="/ImanGNC">
         <AuthProvider>
           <Routes>
             {/* Auth pages - no layout */}
