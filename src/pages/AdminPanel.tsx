@@ -1,26 +1,35 @@
 import { useState } from "react";
-import { Users, Shield, Plus, Pencil, Trash2, Loader2, AlertCircle, FolderOpen } from "lucide-react";
+import { Users, Shield, Plus, Pencil, Trash2, Loader2, AlertCircle, FolderOpen, Building2, FileSignature } from "lucide-react";
 import { motion } from "framer-motion";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { UserManagementDialog } from "@/components/UserManagementDialog";
 import { CategoryManagementDialog } from "@/components/CategoryManagementDialog";
+import { ServiceManagementDialog } from "@/components/ServiceManagementDialog";
+import { SignatureForm } from "@/components/SignatureForm";
 import { useUsers, useDeleteUser } from "@/services";
 import { useCategories, useDeleteCategory } from "@/services/categoryHooks";
+import { useServices, useDeleteService } from "@/services/serviceHooks";
 import type { User, Categorie } from "@/types";
+import type { Service } from "@/services/serviceService";
 
 export default function AdminPanel() {
   const [showUserDialog, setShowUserDialog] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [showCategoryDialog, setShowCategoryDialog] = useState(false);
   const [editingCategory, setEditingCategory] = useState<Categorie | null>(null);
+  const [showServiceDialog, setShowServiceDialog] = useState(false);
+  const [editingService, setEditingService] = useState<Service | null>(null);
   
   const { data: users = [], isLoading: usersLoading, error: usersError } = useUsers();
   const deleteMutation = useDeleteUser();
 
   const { data: categories = [], isLoading: categoriesLoading, error: categoriesError } = useCategories();
   const deleteCategoryMutation = useDeleteCategory();
+
+  const { data: services = [], isLoading: servicesLoading, error: servicesError } = useServices();
+  const deleteServiceMutation = useDeleteService();
 
   const handleEditUser = (user: User) => {
     setEditingUser(user);
@@ -54,6 +63,22 @@ export default function AdminPanel() {
     }
   };
 
+  const handleEditService = (service: Service) => {
+    setEditingService(service);
+    setShowServiceDialog(true);
+  };
+
+  const handleAddService = () => {
+    setEditingService(null);
+    setShowServiceDialog(true);
+  };
+
+  const handleDeleteService = async (serviceId: number) => {
+    if (confirm('Êtes-vous sûr de vouloir supprimer ce service ? Les utilisateurs associés ne seront pas supprimés.')) {
+      await deleteServiceMutation.mutateAsync(serviceId);
+    }
+  };
+
   const getRoleBadgeColor = (role: string) => {
     switch (role) {
       case 'admin': return 'bg-primary/10 text-primary';
@@ -79,9 +104,9 @@ export default function AdminPanel() {
       <div>
         <div className="flex items-center gap-2">
           <Shield className="h-6 w-6 text-primary" />
-          <h1 className="text-2xl font-bold">Administration</h1>
+          <h1 className="text-2xl font-bold">Paramètres</h1>
         </div>
-        <p className="text-muted-foreground text-sm mt-1">Gérez les utilisateurs et les catégories de courriers</p>
+        <p className="text-muted-foreground text-sm mt-1">Gérez les utilisateurs, les services, les catégories de courriers et votre signature</p>
       </div>
 
       {/* Tabs */}
@@ -90,8 +115,14 @@ export default function AdminPanel() {
           <TabsTrigger value="users" className="gap-1.5 text-xs sm:text-sm">
             <Users className="h-3.5 w-3.5" /> Utilisateurs
           </TabsTrigger>
+          <TabsTrigger value="services" className="gap-1.5 text-xs sm:text-sm">
+            <Building2 className="h-3.5 w-3.5" /> Services
+          </TabsTrigger>
           <TabsTrigger value="categories" className="gap-1.5 text-xs sm:text-sm">
-            <FolderOpen className="h-3.5 w-3.5" /> Catégories de courriers
+            <FolderOpen className="h-3.5 w-3.5" /> Catégories
+          </TabsTrigger>
+          <TabsTrigger value="signature" className="gap-1.5 text-xs sm:text-sm">
+            <FileSignature className="h-3.5 w-3.5" /> Signature
           </TabsTrigger>
         </TabsList>
 
@@ -131,6 +162,7 @@ export default function AdminPanel() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Utilisateur</TableHead>
+                    <TableHead>Service</TableHead>
                     <TableHead>Rôle</TableHead>
                     <TableHead>Statut</TableHead>
                     <TableHead className="text-right">Date de création</TableHead>
@@ -150,6 +182,11 @@ export default function AdminPanel() {
                             <p className="text-xs text-muted-foreground">{u.email}</p>
                           </div>
                         </div>
+                      </TableCell>
+                      <TableCell>
+                        <span className="text-sm text-muted-foreground">
+                          {(u as any).service_nom || '—'}
+                        </span>
                       </TableCell>
                       <TableCell>
                         <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getRoleBadgeColor(u.role)}`}>
@@ -181,6 +218,96 @@ export default function AdminPanel() {
                             onClick={() => handleDeleteUser(u.id)}
                             className="h-8 w-8 p-0 text-destructive hover:text-destructive"
                             disabled={deleteMutation.isPending}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </div>
+        </TabsContent>
+
+        {/* Services Tab */}
+        <TabsContent value="services" className="space-y-4">
+          <div className="stat-card overflow-hidden p-0">
+            <div className="p-5 border-b border-border flex items-center justify-between">
+              <div>
+                <h3 className="font-semibold">Services de l'organisation</h3>
+                <p className="text-sm text-muted-foreground mt-0.5">
+                  {services.length} service{services.length > 1 ? 's' : ''}
+                </p>
+              </div>
+              <Button onClick={handleAddService} size="sm">
+                <Plus className="h-4 w-4 mr-2" />
+                Nouveau service
+              </Button>
+            </div>
+            
+            {servicesLoading ? (
+              <div className="p-8 flex flex-col items-center justify-center text-center">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground mb-3" />
+                <p className="text-sm text-muted-foreground">Chargement des services...</p>
+              </div>
+            ) : servicesError ? (
+              <div className="p-8 flex flex-col items-center justify-center text-center">
+                <AlertCircle className="h-8 w-8 text-destructive mb-3" />
+                <p className="text-sm text-destructive">Erreur de chargement</p>
+              </div>
+            ) : services.length === 0 ? (
+              <div className="p-8 text-center">
+                <Building2 className="h-12 w-12 mx-auto mb-3 text-muted-foreground" />
+                <p className="text-sm text-muted-foreground mb-2">Aucun service</p>
+                <p className="text-xs text-muted-foreground">Créez des services comme RH, Comptabilité, IT, etc.</p>
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Nom</TableHead>
+                    <TableHead>Description</TableHead>
+                    <TableHead className="text-right">Utilisateurs</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {services.map((srv) => (
+                    <TableRow key={srv.id}>
+                      <TableCell>
+                        <div className="flex items-center gap-3">
+                          <div className="h-8 w-8 rounded-lg bg-blue-500/10 flex items-center justify-center">
+                            <Building2 className="h-4 w-4 text-blue-600" />
+                          </div>
+                          <p className="text-sm font-medium">{srv.nom}</p>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <p className="text-sm text-muted-foreground">
+                          {srv.description || '—'}
+                        </p>
+                      </TableCell>
+                      <TableCell className="text-right text-sm text-muted-foreground">
+                        {srv.nombre_utilisateurs || 0}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleEditService(srv)}
+                            className="h-8 w-8 p-0"
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleDeleteService(srv.id)}
+                            className="h-8 w-8 p-0 text-destructive hover:text-destructive"
+                            disabled={deleteServiceMutation.isPending}
                           >
                             <Trash2 className="h-3.5 w-3.5" />
                           </Button>
@@ -283,6 +410,11 @@ export default function AdminPanel() {
             )}
           </div>
         </TabsContent>
+
+        {/* Signature Tab */}
+        <TabsContent value="signature" className="space-y-4">
+          <SignatureForm />
+        </TabsContent>
       </Tabs>
 
       <UserManagementDialog 
@@ -292,6 +424,15 @@ export default function AdminPanel() {
           if (!open) setEditingUser(null);
         }} 
         user={editingUser}
+      />
+
+      <ServiceManagementDialog 
+        open={showServiceDialog} 
+        onOpenChange={(open) => {
+          setShowServiceDialog(open);
+          if (!open) setEditingService(null);
+        }} 
+        service={editingService}
       />
 
       <CategoryManagementDialog 

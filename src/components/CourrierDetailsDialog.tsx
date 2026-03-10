@@ -25,7 +25,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import courrierService from "@/services/courrierService";
 import type { Courrier } from "@/types";
-import { SERVICE_CHOICES, STATUT_CHOICES } from "@/types";
+import { STATUT_CHOICES } from "@/types";
 import { ShareCourrierDialog } from "@/components/ShareCourrierDialog";
 
 interface CourrierDetailsDialogProps {
@@ -130,9 +130,20 @@ export function CourrierDetailsDialog({
     );
   };
 
-  // Obtenir le label du service
-  const getServiceLabel = (value: string) => {
-    return SERVICE_CHOICES.find((s) => s.value === value)?.label || value;
+  // Obtenir le label du service depuis le code
+  const getServiceLabel = (serviceCode: string) => {
+    const codeToNameMapping: Record<string, string> = {
+      'rh': 'Ressources Humaines',
+      'comptabilite': 'Comptabilité',
+      'direction': 'Direction',
+      'technique': 'Service Technique',
+      'commercial': 'Commercial',
+      'juridique': 'Juridique',
+      'informatique': 'Informatique',
+      'logistique': 'Logistique',
+      'autre': 'Autre',
+    };
+    return codeToNameMapping[serviceCode] || serviceCode;
   };
 
   return (

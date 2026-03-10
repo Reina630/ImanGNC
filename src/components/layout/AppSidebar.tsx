@@ -6,7 +6,6 @@ import {
   Mail,
   BarChart3,
   FileSpreadsheet,
-  Shield,
   Settings,
   ChevronLeft,
   ChevronRight,
@@ -16,6 +15,7 @@ import {
   Share2,
   Camera,
   Zap,
+  BookOpen,
 } from "lucide-react";
 import imanLogo from "@/assets/logo-iman.png";
 import courrierService from "@/services/courrierService";
@@ -26,19 +26,21 @@ import courrierService from "@/services/courrierService";
  */
 const mainNav = [
   { title: "Tableau de bord", icon: LayoutDashboard, path: "/" },
+  { title: "Mes Courriers", icon: Inbox, path: "/mes-courriers" },
   { title: "Registre", icon: Mail, path: "/courriers" },
-  { title: "Prioritaires", icon: Zap, path: "/courriers/prioritaires", badge: true },
+  // { title: "Prioritaires", icon: Zap, path: "/courriers/prioritaires", badge: false }, // badge mis à jour dynamiquement
   { title: "Scanner", icon: Camera, path: "/scan" },
   { title: "Archives", icon: Archive, path: "/archives" },
   { title: "Historique", icon: Share2, path: "/partages" },
+ 
 ];
 
 /**
  * Menu administration (visible uniquement pour les admins et RH)
  */
 const adminNav = [
-  { title: "Administration", icon: Shield, path: "/admin" },
-  { title: "Paramètres", icon: Settings, path: "/settings" },
+   { title: "Documentation", icon: BookOpen, path: "/documentation" },
+  { title: "Paramètres", icon: Settings, path: "/admin" },
 ];
 
 export default function AppSidebar() {
@@ -95,11 +97,11 @@ export default function AppSidebar() {
           <NavLink key={item.path} to={item.path} className={linkClass(item.path)}>
             <item.icon className="h-[18px] w-[18px] shrink-0" />
             {!collapsed && <span className="flex-1">{item.title}</span>}
-            {!collapsed && item.badge && urgentCount > 0 && (
+            {/* {!collapsed && item.badge && urgentCount > 0 && (
               <span className="px-2 py-0.5 text-xs font-semibold bg-amber-500 text-white rounded-full">
                 {urgentCount}
               </span>
-            )}
+            )} */}
           </NavLink>
         ))}
 

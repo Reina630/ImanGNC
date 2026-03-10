@@ -1,6 +1,43 @@
 /**
- * Page des courriers prioritaires/urgents
- * Affiche uniquement les courriers marqués comme urgents
+ * ============================================================================
+ * PAGE DES COURRIERS PRIORITAIRES - Gestion des Courriers Urgents
+ * ============================================================================
+ * 
+ * Cette page affiche exclusivement les courriers marqués comme "urgents" pour
+ * permettre aux utilisateurs RH/Admin de se concentrer sur les dossiers sensibles
+ * et les traitements prioritaires.
+ * 
+ * FONCTIONNALITÉS PRINCIPALES :
+ * -----------------------------
+ * 1. Affichage filtré : Seuls les courriers avec le flag `urgent=true` sont visibles
+ * 2. Vue en cartes : Présentation moderne et claire avec informations essentielles
+ * 3. Actions rapides : Téléchargement, modification, affectation, gestion des versions
+ * 4. Retrait d'urgence : Possibilité de retirer le marquage urgent d'un courrier
+ * 
+ * PERMISSIONS :
+ * -------------
+ * - Accessible uniquement aux utilisateurs RH et Admin (protection via ProtectedRoute)
+ * - Les utilisateurs normaux ne peuvent pas accéder à cette page
+ * 
+ * ÉTAT ET DONNÉES :
+ * -----------------
+ * - `courriers` : Liste filtrée des courriers urgents uniquement
+ * - `selectedCourrier` : Courrier actuellement sélectionné pour une action
+ * - Plusieurs états de dialogs pour les différentes actions
+ * 
+ * INTERACTIONS :
+ * --------------
+ * - Clic sur "Voir" : Ouvre l'aperçu du fichier scanné
+ * - Clic sur l'icône éclair : Retire le marquage urgent
+ * - Clic sur l'icône téléchargement : Télécharge le fichier
+ * - Clic sur l'icône versions : Affiche l'historique des versions
+ * - Clic sur l'icône œil : Affiche les détails complets
+ * - Clic sur l'icône crayon : Ouvre le formulaire d'édition
+ * - Clic sur l'icône bâtiment : Affecte à un service
+ * 
+ * @author Équipe GED
+ * @version 2.0
+ * @since 2026
  */
 
 import { useState, useEffect } from "react";

@@ -5,11 +5,13 @@ import { useNavigate } from 'react-router-dom';
 
 interface AuthContextType {
   user: User | null;
+  setUser: (user: User | null) => void;
   loading: boolean;
   login: (credentials: LoginCredentials) => Promise<void>;
   logout: () => Promise<void>;
   isAuthenticated: boolean;
   isAdmin: boolean;
+  isRHOrAdmin: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -58,11 +60,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const value: AuthContextType = {
     user,
+    setUser,
     loading,
     login,
     logout,
     isAuthenticated: !!user,
     isAdmin: user?.role === 'admin',
+    isRHOrAdmin: user?.role === 'admin' || user?.role === 'rh',
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

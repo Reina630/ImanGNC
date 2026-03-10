@@ -66,7 +66,7 @@ const NouveauCourrier = () => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
   
-  const handleTypeChange = (type: "entrant" | "sortant") => {
+  const handleTypeChange = (type: "entrant" | "sortant" | "interne") => {
     setTypeCourrier(type);
     // Réinitialiser les champs spécifiques
     setFormData(prev => ({
@@ -227,13 +227,14 @@ const NouveauCourrier = () => {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="typeCourrier">Type de courrier *</Label>
-                  <Select value={typeCourrier} onValueChange={(value) => handleTypeChange(value as "entrant" | "sortant")}>
+                  <Select value={typeCourrier} onValueChange={(value) => handleTypeChange(value as "entrant" | "sortant" | "interne")}>
                     <SelectTrigger id="typeCourrier">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="entrant"> Courrier entrant (reçu)</SelectItem>
                       <SelectItem value="sortant"> Courrier sortant (à envoyer)</SelectItem>
+                      <SelectItem value="interne"> Courrier interne (circulation interne)</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>

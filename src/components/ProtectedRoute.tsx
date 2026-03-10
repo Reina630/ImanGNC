@@ -4,10 +4,11 @@ import { useAuth } from '@/contexts/AuthContext';
 interface ProtectedRouteProps {
   children: React.ReactNode;
   requireAdmin?: boolean;
+  requireRHOrAdmin?: boolean;
 }
 
-export function ProtectedRoute({ children, requireAdmin = false }: ProtectedRouteProps) {
-  const { isAuthenticated, isAdmin, loading } = useAuth();
+export function ProtectedRoute({ children, requireAdmin = false, requireRHOrAdmin = false }: ProtectedRouteProps) {
+  const { isAuthenticated, isAdmin, isRHOrAdmin, loading } = useAuth();
   const location = useLocation();
 
   // Attendre que le chargement soit terminé
@@ -29,6 +30,11 @@ export function ProtectedRoute({ children, requireAdmin = false }: ProtectedRout
 
   // Si admin requis et l'utilisateur n'est pas admin
   if (requireAdmin && !isAdmin) {
+    return <Navigate to="/" replace />;
+  }
+
+  // Si RH ou Admin requis et l'utilisateur n'a pas le bon rôle
+  if (requireRHOrAdmin && !isRHOrAdmin) {
     return <Navigate to="/" replace />;
   }
 

@@ -26,8 +26,9 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import courrierService from "@/services/courrierService";
 import categoryService from "@/services/categoryService";
+import serviceService, { type Service } from "@/services/serviceService";
 import type { Courrier, Categorie } from "@/types";
-import { SERVICE_CHOICES, STATUT_CHOICES } from "@/types";
+import { STATUT_CHOICES } from "@/types";
 
 interface EditCourrierDialogProps {
   open: boolean;
@@ -61,11 +62,13 @@ export function EditCourrierDialog({
   });
 
   const [categories, setCategories] = useState<Categorie[]>([]);
+  const [services, setServices] = useState<Service[]>([]);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  // Charger les catégories au montage
+  // Charger les catégories et services au montage
   useEffect(() => {
     loadCategories();
+    loadServices();
   }, []);
 
   const loadCategories = async () => {
@@ -75,6 +78,51 @@ export function EditCourrierDialog({
     } catch (error) {
       console.error('Erreur lors du chargement des catégories:', error);
     }
+  };
+
+  const loadServices = async () => {
+    try {
+      const data = await serviceService.getServices();
+      setServices(data);
+    } catch (error) {
+      console.error('Erreur lors du chargement des services:', error);
+    }
+  };
+
+  // Mapper le nom d'un service vers son code (pour compatibilité avec l'ancien système)
+  const getServiceCode = (serviceName: string): string => {
+    const mapping: Record<string, string> = {
+      'Ressources Humaines': 'rh',
+      'RH': 'rh',
+      'Comptabilité': 'comptabilite',
+      'Direction': 'direction',
+      'Direction Générale': 'direction',
+      'DG': 'direction',
+      'Service Technique': 'technique',
+      'Technique': 'technique',
+      'Commercial': 'commercial',
+      'Juridique': 'juridique',
+      'Informatique': 'informatique',
+      'IT': 'informatique',
+      'Logistique': 'logistique',
+    };
+    return mapping[serviceName] || 'autre';
+  };
+
+  // Mapper un code de service vers le nom (inverse)
+  const getServiceNameFromCode = (code: string): string => {
+    const mapping: Record<string, string> = {
+      'rh': 'Ressources Humaines',
+      'comptabilite': 'Comptabilité',
+      'direction': 'Direction',
+      'technique': 'Service Technique',
+      'commercial': 'Commercial',
+      'juridique': 'Juridique',
+      'informatique': 'Informatique',
+      'logistique': 'Logistique',
+      'autre': 'Autre',
+    };
+    return mapping[code] || code;
   };
 
   // Pré-remplir le formulaire quand le courrier change
@@ -219,7 +267,7 @@ export function EditCourrierDialog({
             <Select
               value={formData.type_courrier}
               onValueChange={(value) =>
-                setFormData({ ...formData, type_courrier: value as "entrant" | "sortant" })
+                setFormData({ ...formData, type_courrier: value as "entrant" | "sortant" | "interne" })
               }
             >
               <SelectTrigger>
@@ -236,6 +284,12 @@ export function EditCourrierDialog({
                   <div className="flex items-center gap-2">
                     <Send className="h-4 w-4" />
                     Courrier Sortant
+                  </div>
+                </SelectItem>
+                <SelectItem value="interne">
+                  <div className="flex items-center gap-2">
+                    <Mail className="h-4 w-4" />
+                    Courrier Interne
                   </div>
                 </SelectItem>
               </SelectContent>
@@ -367,9 +421,9 @@ export function EditCourrierDialog({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">Aucun service</SelectItem>
-                  {SERVICE_CHOICES.map((service) => (
-                    <SelectItem key={service.value} value={service.value}>
-                      {service.label}
+                  {services.map((service) => (
+                    <SelectItem key={service.id} value={getServiceCode(service.nom)}>
+                      {service.nom}
                     </SelectItem>
                   ))}
                 </SelectContent>

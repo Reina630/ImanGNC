@@ -1,8 +1,8 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
 
 // Nouveau prefixe Render (prod)
-const API_URL = import.meta.env.VITE_API_URL || 'https://backgnc.onrender.com/api';
-//const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
+//const API_URL = import.meta.env.VITE_API_URL || 'https://backgnc.onrender.com/api';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
 
 // Créer l'instance axios centrale
 export const api = axios.create({

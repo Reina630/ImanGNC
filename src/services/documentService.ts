@@ -161,6 +161,40 @@ export const documentService = {
     });
     return response.data;
   },
+
+  /**
+   * Récupérer les documents archivés
+   */
+  async getArchivedDocuments(): Promise<Document[]> {
+    const response = await api.get<Document[]>('/document/archives/');
+    return response.data;
+  },
+
+  /**
+   * Restaurer un document archivé
+   */
+  async restoreDocument(id: number): Promise<Document> {
+    const response = await api.post<Document>(`/document/${id}/restore/`);
+    return response.data;
+  },
+
+  /**
+   * Récupérer toutes les versions d'un document
+   */
+  async getDocumentVersions(id: number): Promise<any[]> {
+    const response = await api.get<any[]>(`/document/${id}/versions/`);
+    return response.data;
+  },
+
+  /**
+   * Restaurer une version spécifique d'un document
+   */
+  async restoreDocumentVersion(id: number, versionId: number): Promise<Document> {
+    const response = await api.post<Document>(`/document/${id}/restore_version/`, {
+      version_id: versionId,
+    });
+    return response.data;
+  },
 };
 
 export default documentService;

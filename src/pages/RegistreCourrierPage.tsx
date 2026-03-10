@@ -1,7 +1,4 @@
-/**
- * Page principale du Registre de Courrier RH
- * Affiche tous les courriers avec filtres, recherche et export Excel
- */
+
 
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
@@ -25,6 +22,7 @@ import {
   Zap,
   ChevronDown,
   ChevronUp,
+  X,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -43,58 +41,74 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import courrierService from "@/services/courrierService";
-import type { Courrier, CourrierStatistics, CourrierFilters } from "@/types";
-import { SERVICE_CHOICES, STATUT_CHOICES } from "@/types";
+import type { Courrier, CourrierStatistics, CourrierFilters, Service } from "@/types";
+import { STATUT_CHOICES } from "@/types";
 import { AffecterServiceDialog } from "@/components/AffecterServiceDialog";
+import { useCategories } from "@/services/categoryHooks";
 
 export default function RegistreCourrierPage() {
   const { toast } = useToast();
   const navigate = useNavigate();
   
   // États
-  const [courriers, setCourriers] = useState<Courrier[]>([]);
+  const [allCourriers, setAllCourriers] = useState<Courrier[]>([]); // Tous les courriers
+  const [filteredCourriers, setFilteredCourriers] = useState<Courrier[]>([]); // Courriers filtrés
   const [statistics, setStatistics] = useState<CourrierStatistics | null>(null);
+  const [services, setServices] = useState<Service[]>([]);
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
   const [selectedCourrier, setSelectedCourrier] = useState<Courrier | null>(null);
-  const [activeTab, setActiveTab] = useState<"entrants" | "sortants">("entrants");
-  const [filtersOpen, setFiltersOpen] = useState(false);
   const [affecterDialogOpen, setAffecterDialogOpen] = useState(false);
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  
+  // Charger les catégories depuis l'API
+  const { data: categories = [] } = useCategories();
   
   // Filtres
   const [filters, setFilters] = useState<CourrierFilters>({
     search: "",
-    type_courrier: "entrant" as any, // Initialiser avec l'onglet par défaut
-    statut: undefined,
-    service_concerne: undefined,
+    type_courrier: undefined,
+    statut: "non_archive", // Par défaut, ne pas afficher les archivés
+    service: undefined,
     date_debut: undefined,
     date_fin: undefined,
+    urgent: undefined,
     ordering: "-created_at",
   });
 
-  // Synchroniser l'onglet actif avec le filtre type_courrier
-  const handleTabChange = (value: "entrants" | "sortants") => {
-    setActiveTab(value);
-    setFilters({ ...filters, type_courrier: value === "entrants" ? "entrant" : "sortant" as any });
-  };
-
-  // Charger les courriers et statistiques au montage
+  // Charger les courriers une seule fois au montage
   useEffect(() => {
     loadCourriers();
-    loadStatistics();
-  }, [filters]);
+    loadServices();
+  }, []);
+
+  // Appliquer les filtres côté frontend quand filters ou allCourriers changent
+  useEffect(() => {
+    applyFilters();
+  }, [filters, allCourriers]);
 
   /**
-   * Charger tous les courriers avec les filtres
+   * Charger la liste des services disponibles
+   */
+  const loadServices = async () => {
+    try {
+      const data = await courrierService.getServicesDisponibles();
+      setServices(data);
+    } catch (error) {
+      console.error("Erreur lors du chargement des services:", error);
+    }
+  };
+
+  /**
+   * Charger tous les courriers (sans filtres)
    */
   const loadCourriers = async () => {
     try {
       setLoading(true);
-      const data = await courrierService.getCourriers(filters);
-      setCourriers(data);
+      const data = await courrierService.getCourriers({ ordering: "-created_at" });
+      setAllCourriers(data);
     } catch (error) {
       console.error("Erreur lors du chargement des courriers:", error);
       toast({
@@ -105,6 +119,136 @@ export default function RegistreCourrierPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  /**
+   * Appliquer les filtres côté frontend
+   */
+  const applyFilters = () => {
+    let result = [...allCourriers];
+
+    // Filtre par recherche (numéro, objet, expéditeur, destinataire)
+    if (filters.search) {
+      const searchLower = filters.search.toLowerCase();
+      result = result.filter(courrier => 
+        courrier.numero_registre.toLowerCase().includes(searchLower) ||
+        courrier.objet.toLowerCase().includes(searchLower) ||
+        courrier.expediteur.toLowerCase().includes(searchLower) ||
+        courrier.destinataire.toLowerCase().includes(searchLower)
+      );
+    }
+
+    // Filtre par type de courrier
+    if (filters.type_courrier) {
+      result = result.filter(courrier => courrier.type_courrier === filters.type_courrier);
+    }
+
+    // Filtre par statut
+    if (filters.statut) {
+      if (filters.statut === "non_archive") {
+        // Exclure les archivés par défaut
+        result = result.filter(courrier => courrier.statut !== "archive");
+      } else {
+        result = result.filter(courrier => courrier.statut === filters.statut);
+      }
+    }
+
+    // Filtre par service
+    if (filters.service) {
+      const selectedService = services.find(s => s.id === filters.service);
+      if (selectedService) {
+        result = result.filter(courrier => 
+          courrier.service_concerne_display?.includes(selectedService.nom) ||
+          courrier.service_concerne === selectedService.nom
+        );
+      }
+    }
+
+    // Filtre par urgence
+    if (filters.urgent !== undefined) {
+      result = result.filter(courrier => courrier.urgent === filters.urgent);
+    }
+
+    // Filtre par date de début
+    if (filters.date_debut) {
+      const dateDebut = new Date(filters.date_debut);
+      result = result.filter(courrier => {
+        const dateCourrier = new Date(courrier.date_principale);
+        return dateCourrier >= dateDebut;
+      });
+    }
+
+    // Filtre par date de fin
+    if (filters.date_fin) {
+      const dateFin = new Date(filters.date_fin);
+      dateFin.setHours(23, 59, 59, 999); // Inclure toute la journée
+      result = result.filter(courrier => {
+        const dateCourrier = new Date(courrier.date_principale);
+        return dateCourrier <= dateFin;
+      });
+    }
+
+    // Tri
+    if (filters.ordering) {
+      const [direction, field] = filters.ordering.startsWith('-') 
+        ? ['desc', filters.ordering.slice(1)]
+        : ['asc', filters.ordering];
+
+      result.sort((a, b) => {
+        let aVal, bVal;
+        
+        switch (field) {
+          case 'created_at':
+            aVal = new Date(a.created_at).getTime();
+            bVal = new Date(b.created_at).getTime();
+            break;
+          case 'date_principale':
+            aVal = new Date(a.date_principale).getTime();
+            bVal = new Date(b.date_principale).getTime();
+            break;
+          case 'numero_registre':
+            aVal = a.numero_registre;
+            bVal = b.numero_registre;
+            break;
+          default:
+            return 0;
+        }
+
+        if (aVal < bVal) return direction === 'asc' ? -1 : 1;
+        if (aVal > bVal) return direction === 'asc' ? 1 : -1;
+        return 0;
+      });
+    }
+
+    setFilteredCourriers(result);
+    
+    // Calculer les statistiques à partir des courriers filtrés
+    calculateStatistics(result);
+  };
+
+  /**
+   * Calculer les statistiques à partir des courriers
+   */
+  const calculateStatistics = (courriers: Courrier[]) => {
+    const stats: CourrierStatistics = {
+      total: courriers.length,
+      entrants: courriers.filter(c => c.type_courrier === 'entrant').length,
+      sortants: courriers.filter(c => c.type_courrier === 'sortant').length,
+      internes: courriers.filter(c => c.type_courrier === 'interne').length,
+      urgents: courriers.filter(c => c.urgent).length,
+      courriers_avec_versions: 0,
+      total_versions: 0,
+      par_statut: {
+        recu: { label: 'Reçu', count: courriers.filter(c => c.statut === 'recu').length },
+        en_traitement: { label: 'En traitement', count: courriers.filter(c => c.statut === 'en_traitement').length },
+        traite: { label: 'Traité', count: courriers.filter(c => c.statut === 'traite').length },
+        archive: { label: 'Archivé', count: courriers.filter(c => c.statut === 'archive').length },
+      },
+      par_service: {},
+      tendances_mensuelles: []
+    };
+
+    setStatistics(stats);
   };
 
   /**
@@ -129,15 +273,23 @@ export default function RegistreCourrierPage() {
     }
   };
 
-  /**
-   * Charger les statistiques
-   */
-  const loadStatistics = async () => {
+  const handleArchive = async (id: number) => {
     try {
-      const data = await courrierService.getStatistiques();
-      setStatistics(data);
+      // Changer le statut du courrier à 'archive'
+      await courrierService.changerStatut(id, 'archive');
+      // Recharger les courriers pour afficher le changement
+      loadCourriers();
+      toast({
+        title: "Courrier archivé",
+        description: "Le courrier a été archivé avec succès",
+      });
     } catch (error) {
-      console.error("Erreur lors du chargement des statistiques:", error);
+      console.error("Erreur lors de l'archivage:", error);
+      toast({
+        variant: "destructive",
+        title: "Erreur",
+        description: "Impossible d'archiver le courrier",
+      });
     }
   };
 
@@ -147,6 +299,7 @@ export default function RegistreCourrierPage() {
   const handleExport = async () => {
     try {
       setExporting(true);
+      // Exporter avec les filtres actuels
       await courrierService.telechargerExcel(filters);
       toast({
         title: "Export réussi",
@@ -232,21 +385,78 @@ export default function RegistreCourrierPage() {
   };
 
   /**
-   * Filtrer les courriers en fonction de l'onglet actif
-   * Note: Maintenant géré côté backend via filters.type_courrier
+   * Obtenir l'icône et la couleur selon le type de courrier
    */
-  const filteredCourriers = courriers;
+  const getTypeCourrierBadge = (type: string) => {
+    if (type === "entrant") {
+      return {
+        icon: <Inbox className="h-3 w-3" />,
+        className: "bg-blue-100 text-blue-700",
+        label: "Entrant"
+      };
+    }
+    if (type === "sortant") {
+      return {
+        icon: <Send className="h-3 w-3" />,
+        className: "bg-green-100 text-green-700",
+        label: "Sortant"
+      };
+    }
+    return {
+      icon: <Mail className="h-3 w-3" />,
+      className: "bg-purple-100 text-purple-700",
+      label: "Interne"
+    };
+  };
 
   /**
-   * Compter les courriers urgents - afficher le nombre total car filtering côté backend
+   * Mettre à jour un filtre spécifique
    */
-  const urgentCount = courriers.filter(c => c.urgent).length;
+  const updateFilter = (key: keyof CourrierFilters, value: any) => {
+    setFilters(prev => ({
+      ...prev,
+      [key]: value
+    }));
+  };
+
+  /**
+   * Réinitialiser tous les filtres
+   */
+  const resetFilters = () => {
+    setFilters({
+      search: "",
+      type_courrier: undefined,
+      statut: "non_archive", // Par défaut, ne pas afficher les archivés
+      service: undefined,
+      date_debut: undefined,
+      date_fin: undefined,
+      urgent: undefined,
+      ordering: "-created_at",
+    });
+  };
+
+  /**
+   * Compter le nombre de filtres actifs
+   */
+  const countActiveFilters = () => {
+    let count = 0;
+    if (filters.search) count++;
+    if (filters.type_courrier) count++;
+    if (filters.statut) count++;
+    if (filters.service) count++;
+    if (filters.date_debut) count++;
+    if (filters.date_fin) count++;
+    if (filters.urgent) count++;
+    return count;
+  };
+
+  const activeFiltersCount = countActiveFilters();
 
   return (
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      className="space-y-6"
+      className="space-y-4"
     >
       {/* En-tête avec titre et bouton d'export */}
       <div className="flex items-center justify-between">
@@ -256,7 +466,7 @@ export default function RegistreCourrierPage() {
             Registre de Courrier
           </h1>
           <p className="text-muted-foreground text-sm mt-1">
-            Gestion des courriers entrants et sortants
+            Gestion des courriers entrants, sortants et internes
           </p>
         </div>
         
@@ -285,7 +495,7 @@ export default function RegistreCourrierPage() {
 
       {/* Statistiques */}
       {statistics && (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
           <div className="stat-card">
             <div className="flex items-center justify-between">
               <div>
@@ -319,6 +529,16 @@ export default function RegistreCourrierPage() {
           <div className="stat-card">
             <div className="flex items-center justify-between">
               <div>
+                <p className="text-sm text-muted-foreground">Internes</p>
+                <p className="text-2xl font-bold text-purple-600">{statistics.internes}</p>
+              </div>
+              <Mail className="h-8 w-8 text-purple-600 opacity-20" />
+            </div>
+          </div>
+
+          <div className="stat-card">
+            <div className="flex items-center justify-between">
+              <div>
                 <p className="text-sm text-muted-foreground">En traitement</p>
                 <p className="text-2xl font-bold text-amber-600">
                   {statistics.par_statut?.en_traitement?.count || 0}
@@ -330,246 +550,497 @@ export default function RegistreCourrierPage() {
         </div>
       )}
 
-      {/* Barre de recherche et filtres visibles */}
-      <div className="stat-card flex flex-row items-center gap-3 py-3 px-4">
-        <div className="relative flex items-center flex-1 min-w-[350px] max-w-[600px]">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Rechercher (n°, objet, expéditeur...)"
-            value={filters.search}
-            onChange={(e) => setFilters({ ...filters, search: e.target.value })}
-            className="pl-10 h-9 w-full"
-          />
+      {/* Barre de recherche et filtres */}
+      <div className="stat-card space-y-2 py-3">
+        {/* Barre de recherche principale */}
+        <div className="flex flex-col sm:flex-row gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              type="text"
+              placeholder="Rechercher par numéro, objet, expéditeur ou destinataire..."
+              value={filters.search || ""}
+              onChange={(e) => updateFilter("search", e.target.value)}
+              className="pl-10"
+            />
+            {filters.search && (
+              <button
+                onClick={() => updateFilter("search", "")}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+          
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
+            className="gap-1.5"
+          >
+            <Filter className="h-3.5 w-3.5" />
+            Filtres
+            {activeFiltersCount > 0 && (
+              <Badge variant="secondary" className="ml-0.5 h-4 px-1 text-xs">
+                {activeFiltersCount}
+              </Badge>
+            )}
+            {showAdvancedFilters ? (
+              <ChevronUp className="h-3.5 w-3.5" />
+            ) : (
+              <ChevronDown className="h-3.5 w-3.5" />
+            )}
+          </Button>
+
+          {activeFiltersCount > 0 && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={resetFilters}
+              className="gap-1.5"
+            >
+              <X className="h-3.5 w-3.5" />
+              Réinitialiser
+            </Button>
+          )}
         </div>
-        <Select
-          value={filters.statut || "all"}
-          onValueChange={(value) =>
-            setFilters({ ...filters, statut: value === "all" ? undefined : value as any })
-          }
-        >
-          <SelectTrigger className="h-9 w-[160px]">
-            <SelectValue placeholder="Statut" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Tous les statuts</SelectItem>
-            {STATUT_CHOICES.map((statut) => (
-              <SelectItem key={statut.value} value={statut.value}>
-                {statut.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select
-          value={filters.service_concerne || "all"}
-          onValueChange={(value) =>
-            setFilters({ ...filters, service_concerne: value === "all" ? undefined : value })
-          }
-        >
-          <SelectTrigger className="h-9 w-[180px]">
-            <SelectValue placeholder="Service" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Tous les services</SelectItem>
-            {SERVICE_CHOICES.map((service) => (
-              <SelectItem key={service.value} value={service.value}>
-                {service.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+
+        {/* Filtres avancés (collapsibles) */}
+        {showAdvancedFilters && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 pt-2 border-t"
+          >
+            {/* Type de courrier */}
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">
+                Type
+              </label>
+              <Select
+                value={filters.type_courrier || "all"}
+                onValueChange={(value) => 
+                  updateFilter("type_courrier", value === "all" ? undefined : value)
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Tous</SelectItem>
+                  <SelectItem value="entrant">
+                    <div className="flex items-center gap-2">
+                      <Inbox className="h-3 w-3" />
+                      Entrant
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="sortant">
+                    <div className="flex items-center gap-2">
+                      <Send className="h-3 w-3" />
+                      Sortant
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="interne">
+                    <div className="flex items-center gap-2">
+                      <Mail className="h-3 w-3" />
+                      Interne
+                    </div>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Statut */}
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">
+                Statut
+              </label>
+              <Select
+                value={filters.statut || "all"}
+                onValueChange={(value) => 
+                  updateFilter("statut", value === "all" ? undefined : value)
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="non_archive">Actifs (non archivés)</SelectItem>
+                  <SelectItem value="all">Tous</SelectItem>
+                  {STATUT_CHOICES.map((statut) => (
+                    <SelectItem key={statut.value} value={statut.value}>
+                      {statut.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Service */}
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">
+                Service
+              </label>
+              <Select
+                value={filters.service?.toString() || "all"}
+                onValueChange={(value) => 
+                  updateFilter("service", value === "all" ? undefined : parseInt(value))
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Tous les services" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Tous</SelectItem>
+                  {services.map((service) => (
+                    <SelectItem key={service.id} value={service.id.toString()}>
+                      {service.nom}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Urgence */}
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">
+                Urgence
+              </label>
+              <Select
+                value={filters.urgent === undefined ? "all" : filters.urgent.toString()}
+                onValueChange={(value) => 
+                  updateFilter("urgent", value === "all" ? undefined : value === "true")
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Tous</SelectItem>
+                  <SelectItem value="true">
+                    <div className="flex items-center gap-2">
+                      <Zap className="h-3 w-3 text-amber-500 fill-amber-500" />
+                      Urgents uniquement
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="false">Non urgents</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Date début */}
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">
+                Date de début
+              </label>
+              <Input
+                type="date"
+                value={filters.date_debut || ""}
+                onChange={(e) => updateFilter("date_debut", e.target.value || undefined)}
+              />
+            </div>
+
+            {/* Date fin */}
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">
+                Date de fin
+              </label>
+              <Input
+                type="date"
+                value={filters.date_fin || ""}
+                onChange={(e) => updateFilter("date_fin", e.target.value || undefined)}
+              />
+            </div>
+
+            {/* Tri */}
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">
+                Trier par
+              </label>
+              <Select
+                value={filters.ordering || "-created_at"}
+                onValueChange={(value) => updateFilter("ordering", value)}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="-created_at">Plus récent</SelectItem>
+                  <SelectItem value="created_at">Plus ancien</SelectItem>
+                  <SelectItem value="-date_principale">Date décroissante</SelectItem>
+                  <SelectItem value="date_principale">Date croissante</SelectItem>
+                  <SelectItem value="numero_registre">N° Registre (A-Z)</SelectItem>
+                  <SelectItem value="-numero_registre">N° Registre (Z-A)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </motion.div>
+        )}
+
+        {/* Affichage des filtres actifs sous forme de badges */}
+        {activeFiltersCount > 0 && (
+          <div className="flex flex-wrap gap-1.5 pt-1.5">
+            {filters.search && (
+              <Badge variant="secondary" className="gap-1">
+                Recherche: {filters.search}
+                <button
+                  onClick={() => updateFilter("search", "")}
+                  className="ml-1 hover:text-destructive"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </Badge>
+            )}
+            {filters.type_courrier && (
+              <Badge variant="secondary" className="gap-1">
+                Type: {filters.type_courrier === "entrant" ? "Entrant" : filters.type_courrier === "sortant" ? "Sortant" : "Interne"}
+                <button
+                  onClick={() => updateFilter("type_courrier", undefined)}
+                  className="ml-1 hover:text-destructive"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </Badge>
+            )}
+            {filters.statut && filters.statut !== "non_archive" && (
+              <Badge variant="secondary" className="gap-1">
+                Statut: {filters.statut === "all" ? "Tous" : STATUT_CHOICES.find(s => s.value === filters.statut)?.label}
+                <button
+                  onClick={() => updateFilter("statut", "non_archive")}
+                  className="ml-1 hover:text-destructive"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </Badge>
+            )}
+            {filters.service && (
+              <Badge variant="secondary" className="gap-1">
+                Service: {services.find(s => s.id === filters.service)?.nom}
+                <button
+                  onClick={() => updateFilter("service", undefined)}
+                  className="ml-1 hover:text-destructive"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </Badge>
+            )}
+            {filters.urgent !== undefined && (
+              <Badge variant="secondary" className="gap-1">
+                {filters.urgent ? "Urgents uniquement" : "Non urgents"}
+                <button
+                  onClick={() => updateFilter("urgent", undefined)}
+                  className="ml-1 hover:text-destructive"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </Badge>
+            )}
+            {filters.date_debut && (
+              <Badge variant="secondary" className="gap-1">
+                Depuis: {new Date(filters.date_debut).toLocaleDateString("fr-FR")}
+                <button
+                  onClick={() => updateFilter("date_debut", undefined)}
+                  className="ml-1 hover:text-destructive"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </Badge>
+            )}
+            {filters.date_fin && (
+              <Badge variant="secondary" className="gap-1">
+                Jusqu'à: {new Date(filters.date_fin).toLocaleDateString("fr-FR")}
+                <button
+                  onClick={() => updateFilter("date_fin", undefined)}
+                  className="ml-1 hover:text-destructive"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </Badge>
+            )}
+          </div>
+        )}
       </div>
 
-      {/* Tableau des courriers avec onglets */}
-      <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-        <div className="flex items-center justify-between mb-4">
-          <TabsList>
-            <TabsTrigger value="entrants" className="gap-2">
-              <Inbox className="h-4 w-4" />
-              Entrants
-              <Badge variant="secondary" className="ml-1">
-                {statistics?.entrants || 0}
-              </Badge>
-              {urgentCount > 0 && activeTab === "entrants" && (
-                <Badge variant="secondary" className="ml-1 bg-amber-100 text-amber-700 hover:bg-amber-100">
-                  {urgentCount}
-                </Badge>
-              )}
-            </TabsTrigger>
-            <TabsTrigger value="sortants" className="gap-2">
-              <Send className="h-4 w-4" />
-              Sortants
-              <Badge variant="secondary" className="ml-1">
-                {statistics?.sortants || 0}
-              </Badge>
-              {urgentCount > 0 && activeTab === "sortants" && (
-                <Badge variant="secondary" className="ml-1 bg-amber-100 text-amber-700 hover:bg-amber-100">
-                  {urgentCount}
-                </Badge>
-              )}
-            </TabsTrigger>
-          </TabsList>
+      {/* Indicateur de résultats */}
+      {!loading && (
+        <div className="flex items-center justify-between text-xs text-muted-foreground px-1 -mt-2">
+          <span>
+            {filteredCourriers.length === 0 ? (
+              "Aucun courrier trouvé"
+            ) : (
+              <>
+                <span className="font-medium text-foreground">{filteredCourriers.length}</span>
+                {" "}courrier{filteredCourriers.length > 1 ? "s" : ""} trouvé{filteredCourriers.length > 1 ? "s" : ""}
+                {activeFiltersCount > 0 && " (filtré)"}
+              </>
+            )}
+          </span>
         </div>
-
-        <TabsContent value={activeTab} className="mt-0">
-          <div className="stat-card overflow-hidden p-0">
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-muted/50 border-b">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">
-                      N° Registre
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">
-                      Date
-                    </th>
-                    {activeTab === "entrants" && (
-                      <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">
-                        Expéditeur
-                      </th>
-                    )}
-                    {activeTab === "sortants" && (
-                      <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">
-                        Destinataire
-                      </th>
-                    )}
-                    <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">
-                      Objet
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">
-                      Service
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">
-                      Statut
-                    </th>
-                    <th className="px-4 py-3 text-right text-xs font-medium text-muted-foreground uppercase">
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y">
-                  {loading ? (
-                    <tr>
-                      <td colSpan={7} className="px-4 py-8 text-center text-sm text-muted-foreground">
-                        Chargement...
+      )}
+     
+      {/* Tableau des courriers */}
+      <div className="stat-card overflow-hidden p-0">
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead className="bg-muted/50 border-b">
+              <tr>
+                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">
+                  N° Registre
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">
+                  Type
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">
+                  Date
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">
+                  Expéditeur / Destinataire
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">
+                  Objet
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">
+                  Service
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">
+                  Statut
+                </th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-muted-foreground uppercase">
+                  Actions
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {loading ? (
+                <tr>
+                  <td colSpan={8} className="px-4 py-8 text-center text-sm text-muted-foreground">
+                    Chargement...
+                  </td>
+                </tr>
+              ) : filteredCourriers.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="px-4 py-8 text-center text-sm text-muted-foreground">
+                    Aucun courrier trouvé
+                  </td>
+                </tr>
+              ) : (
+                filteredCourriers.map((courrier) => {
+                  const typeBadge = getTypeCourrierBadge(courrier.type_courrier);
+                  return (
+                    <tr 
+                      key={courrier.id} 
+                      className={`hover:bg-muted/30 transition-colors ${
+                        courrier.urgent ? 'bg-amber-50/50 border-l-4 border-amber-500' : ''
+                      }`}
+                    >
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          {courrier.urgent && (
+                            <div className="relative">
+                              <Zap className="h-4 w-4 text-amber-500 fill-amber-500" />
+                            </div>
+                          )}
+                          <span className="font-mono text-sm font-medium">
+                            {courrier.numero_registre}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <Badge className={`gap-1 ${typeBadge.className}`}>
+                          {typeBadge.icon}
+                          {typeBadge.label}
+                        </Badge>
+                      </td>
+                      <td className="px-4 py-3 text-sm">
+                        {formatDate(courrier.date_principale)}
+                      </td>
+                      <td className="px-4 py-3 text-sm max-w-[150px]">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const entite = courrier.type_courrier === "entrant" 
+                              ? courrier.expediteur 
+                              : courrier.destinataire;
+                            navigate(`/courriers/entite/${encodeURIComponent(entite)}`);
+                          }}
+                          className="text-left truncate hover:text-primary hover:underline transition-colors font-medium"
+                        >
+                          {courrier.type_courrier === "entrant" 
+                            ? courrier.expediteur 
+                            : courrier.destinataire}
+                        </button>
+                      </td>
+                      <td className="px-4 py-3 text-sm max-w-[200px] truncate">
+                        {courrier.objet}
+                      </td>
+                      <td className="px-4 py-3 text-sm">
+                        {courrier.service_concerne_display || "-"}
+                      </td>
+                      <td className="px-4 py-3">
+                        <Badge className={`gap-1 ${getStatutColor(courrier.statut)}`}>
+                          {getStatutIcon(courrier.statut)}
+                          {courrier.statut_display}
+                        </Badge>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center justify-end gap-2">
+                          {/* Menu dropdown avec toutes les actions */}
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-8 w-8 p-0"
+                              >
+                                <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="w-48">
+                              <DropdownMenuItem
+                                onClick={() => navigate(`/courriers/${courrier.id}`)}
+                                className="font-medium"
+                              >
+                                <Eye className="h-4 w-4 mr-2" />
+                                Voir détails
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() => {
+                                  setSelectedCourrier(courrier);
+                                  setAffecterDialogOpen(true);
+                                }}
+                              >
+                                <Building2 className="h-4 w-4 mr-2" />
+                                Affecter à un service
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() => handleToggleUrgent(courrier.id)}
+                                className={courrier.urgent ? "text-amber-700" : ""}
+                              >
+                                <Zap className={`h-4 w-4 mr-2 ${courrier.urgent ? 'fill-amber-500 text-amber-500' : ''}`} />
+                                {courrier.urgent ? "Retirer urgent" : "Marquer urgent"}
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                onClick={() => handleArchive(courrier.id)}
+                                className="text-red-600"
+                              >
+                                <Archive className="h-4 w-4 mr-2" />
+                                Archiver
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
                       </td>
                     </tr>
-                  ) : filteredCourriers.length === 0 ? (
-                    <tr>
-                      <td colSpan={7} className="px-4 py-8 text-center text-sm text-muted-foreground">
-                        Aucun courrier trouvé
-                      </td>
-                    </tr>
-                  ) : (
-                    filteredCourriers.map((courrier) => (
-                      <tr 
-                        key={courrier.id} 
-                        className={`hover:bg-muted/30 transition-colors ${
-                          courrier.urgent ? 'bg-amber-50/50 border-l-4 border-amber-500' : ''
-                        }`}
-                      >
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-2">
-                            {courrier.urgent && (
-                              <div className="relative">
-                                <Zap className="h-4 w-4 text-amber-500 fill-amber-500" />
-                              </div>
-                            )}
-                            <span className="font-mono text-sm font-medium">
-                              {courrier.numero_registre}
-                            </span>
-                          </div>
-                        </td>
-                        <td className="px-4 py-3 text-sm">
-                          {formatDate(courrier.date_principale)}
-                        </td>
-                        {activeTab === "entrants" && (
-                          <td className="px-4 py-3 text-sm max-w-[150px]">
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                navigate(`/courriers/entite/${encodeURIComponent(courrier.expediteur)}`);
-                              }}
-                              className="text-left truncate hover:text-primary hover:underline transition-colors font-medium"
-                            >
-                              {courrier.expediteur}
-                            </button>
-                          </td>
-                        )}
-                        {activeTab === "sortants" && (
-                          <td className="px-4 py-3 text-sm max-w-[150px]">
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                navigate(`/courriers/entite/${encodeURIComponent(courrier.destinataire)}`);
-                              }}
-                              className="text-left truncate hover:text-primary hover:underline transition-colors font-medium"
-                            >
-                              {courrier.destinataire}
-                            </button>
-                          </td>
-                        )}
-                        <td className="px-4 py-3 text-sm max-w-[200px] truncate">
-                          {courrier.objet}
-                        </td>
-                        <td className="px-4 py-3 text-sm">
-                          {courrier.service_concerne_display || "-"}
-                        </td>
-                        <td className="px-4 py-3">
-                          <Badge className={`gap-1 ${getStatutColor(courrier.statut)}`}>
-                            {getStatutIcon(courrier.statut)}
-                            {courrier.statut_display}
-                          </Badge>
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center justify-end gap-2">
-                            {/* Menu dropdown avec toutes les actions */}
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  className="h-8 w-8 p-0"
-                                >
-                                  <MoreHorizontal className="h-4 w-4" />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end" className="w-48">
-                                <DropdownMenuItem
-                                  onClick={() => navigate(`/courriers/${courrier.id}`)}
-                                  className="font-medium"
-                                >
-                                  <Eye className="h-4 w-4 mr-2" />
-                                  Voir détails
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  onClick={() => {
-                                    setSelectedCourrier(courrier);
-                                    setAffecterDialogOpen(true);
-                                  }}
-                                >
-                                  <Building2 className="h-4 w-4 mr-2" />
-                                  Affecter à un service
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  onClick={() => handleToggleUrgent(courrier.id)}
-                                  className={courrier.urgent ? "text-amber-700" : ""}
-                                >
-                                  <Zap className={`h-4 w-4 mr-2 ${courrier.urgent ? 'fill-amber-500 text-amber-500' : ''}`} />
-                                  {courrier.urgent ? "Retirer urgent" : "Marquer urgent"}
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          </div>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </TabsContent>
-      </Tabs>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
 
       {/* Dialog d'affectation à un service */}
       <AffecterServiceDialog
@@ -578,7 +1049,6 @@ export default function RegistreCourrierPage() {
         courrier={selectedCourrier}
         onSuccess={() => {
           loadCourriers();
-          loadStatistics();
         }}
       />
     </motion.div>

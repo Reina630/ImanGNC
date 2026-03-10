@@ -5,7 +5,8 @@ import { componentTagger } from "lovable-tagger";
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
-  base: "/ImanGNC/",
+  // Utiliser base /ImanGNC/ seulement en production
+  base: mode === 'production' ? '/ImanGNC/' : '/',
   server: {
     host: "::",
     port: 8080,

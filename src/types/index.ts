@@ -6,6 +6,15 @@ export interface PaginatedResponse<T> {
   results: T[];
 }
 
+// Service types
+export interface Service {
+  id: number;
+  nom: string;
+  description?: string;
+  created_at: string;
+  updated_at: string;
+}
+
 // User types
 export interface User {
   id: number;
@@ -14,6 +23,10 @@ export interface User {
   role: 'admin' | 'rh' | 'collaborator' | 'client';
   is_active: boolean;
   date_joined: string;
+  service?: number;
+  service_nom?: string;
+  signature_electronique?: string;
+  signature_url?: string | null;
 }
 
 // Auth types
@@ -86,6 +99,10 @@ export interface Document {
   access_request_status?: 'pending' | 'approved' | 'rejected' | null;
   created_at: string;
   updated_at: string;
+  // Champs pour les documents archivés
+  is_deleted?: boolean;
+  deleted_at?: string;
+  deleted_by?: number;
 }
 
 // Folder types
@@ -145,8 +162,8 @@ export interface Courrier {
   numero_registre: string;  // Ex: "2026-0001"
   
   // Type et dates
-  type_courrier: 'entrant' | 'sortant';
-  type_courrier_display: string;  // "Courrier Entrant" ou "Courrier Sortant"
+  type_courrier: 'entrant' | 'sortant' | 'interne';
+  type_courrier_display: string;  // "Courrier Entrant", "Courrier Sortant" ou "Courrier Interne"
   date_reception: string | null;  // Format ISO
   date_envoi: string | null;      // Format ISO
   date_principale: string | null; // Date principale selon le type
@@ -195,13 +212,18 @@ export interface Courrier {
   enregistre_par_details?: UserSimple;
   created_at: string;
   updated_at: string;
+  
+  // Archivage (soft delete)
+  is_deleted?: boolean;
+  deleted_at?: string;
+  deleted_by?: number;
 }
 
 /**
  * Type pour la création d'un courrier (formulaire)
  */
 export interface CourrierCreate {
-  type_courrier: 'entrant' | 'sortant';
+  type_courrier: 'entrant' | 'sortant' | 'interne';
   date_reception?: string;  // Obligatoire si entrant
   date_envoi?: string;      // Obligatoire si sortant
   expediteur: string;
@@ -219,13 +241,15 @@ export interface CourrierCreate {
  * Type pour les filtres de recherche de courriers
  */
 export interface CourrierFilters {
-  type_courrier?: 'entrant' | 'sortant';
-  statut?: 'recu' | 'en_traitement' | 'traite' | 'archive';
-  service_concerne?: string;
+  type_courrier?: 'entrant' | 'sortant' | 'interne';
+  statut?: 'recu' | 'en_traitement' | 'traite' | 'archive' | 'non_archive' | 'all';
+  service_concerne?: string; // Code du service (ancien système, pour rétro-compatibilité)
+  service?: number; // ID du service (nouveau système avec BDD)
   search?: string;
   date_debut?: string;
   date_fin?: string;
   ordering?: string;
+  urgent?: boolean;
 }
 
 /**
@@ -235,6 +259,7 @@ export interface CourrierStatistics {
   total: number;
   entrants: number;
   sortants: number;
+  internes: number;
   urgents: number;
   courriers_avec_versions: number;
   total_versions: number;
@@ -255,6 +280,7 @@ export interface CourrierStatistics {
     total: number;
     entrants: number;
     sortants: number;
+    internes: number;
   }>;
   partages_total?: number;
   partages_email?: number;
@@ -296,4 +322,59 @@ export const STATUT_CHOICES = [
   { value: 'en_traitement', label: 'En traitement', color: 'bg-yellow-100 text-yellow-800' },
   { value: 'traite', label: 'Traité', color: 'bg-green-100 text-green-800' },
   { value: 'archive', label: 'Archivé', color: 'bg-gray-100 text-gray-800' },
+] as const;
+
+// ============================================================================
+// TYPES POUR LES AFFECTATIONS DE COURRIERS
+// ============================================================================
+
+/**
+ * Type pour une affectation de courrier
+ */
+export interface AffectationCourrier {
+  id: number;
+  courrier: number;
+  courrier_numero: string;
+  courrier_objet: string;
+  utilisateur: number;
+  utilisateur_username: string;
+  utilisateur_nom_complet: string;
+  utilisateur_service: string;
+  affecte_par: number;
+  affecte_par_username: string;
+  affecte_par_nom_complet: string;
+  note: string;
+  statut: 'en_attente' | 'lu' | 'en_traitement' | 'valide' | 'rejete' | 'signe';
+  statut_display: string;
+  commentaire_traitement: string;
+  motif_rejet: string;
+  nb_commentaires: number;
+  date_affectation: string;
+  date_lecture: string | null;
+  date_traitement: string | null;
+}
+
+/**
+ * Type pour un commentaire d'affectation
+ */
+export interface CommentaireCourrier {
+  id: number;
+  affectation: number;
+  auteur: number;
+  auteur_username: string;
+  auteur_nom_complet: string;
+  contenu: string;
+  date_creation: string;
+}
+
+/**
+ * Choix pour les statuts d'affectation
+ */
+export const AFFECTATION_STATUT_CHOICES = [
+  { value: 'en_attente', label: 'En attente', color: 'bg-yellow-100 text-yellow-800' },
+  { value: 'lu', label: 'Lu', color: 'bg-blue-100 text-blue-800' },
+  { value: 'en_traitement', label: 'En traitement', color: 'bg-orange-100 text-orange-800' },
+  { value: 'valide', label: 'Validé', color: 'bg-green-100 text-green-800' },
+  { value: 'rejete', label: 'Rejeté', color: 'bg-red-100 text-red-800' },
+  { value: 'signe', label: 'Signé', color: 'bg-purple-100 text-purple-800' },
 ] as const;

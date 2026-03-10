@@ -38,8 +38,9 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import courrierService from "@/services/courrierService";
+import serviceService, { type Service } from "@/services/serviceService";
 import type { Courrier } from "@/types";
-import { SERVICE_CHOICES, STATUT_CHOICES } from "@/types";
+import { STATUT_CHOICES } from "@/types";
 import { EditCourrierDialog } from "@/components/EditCourrierDialog";
 import { CourrierVersionsDialog } from "@/components/CourrierVersionsDialog";
 import { ShareCourrierDialog } from "@/components/ShareCourrierDialog";
@@ -51,6 +52,7 @@ export default function DetailsCourrier() {
 
   // États
   const [courrier, setCourrier] = useState<Courrier | null>(null);
+  const [services, setServices] = useState<Service[]>([]);
   const [loading, setLoading] = useState(true);
   const [downloading, setDownloading] = useState(false);
   const [changingStatus, setChangingStatus] = useState(false);
@@ -60,12 +62,23 @@ export default function DetailsCourrier() {
   const [newStatus, setNewStatus] = useState<string>("");
   const [previewUrl, setPreviewUrl] = useState<string>("");
 
-  // Charger le courrier
+  // Charger le courrier et les services
   useEffect(() => {
     if (id) {
       loadCourrier();
+      loadServices();
     }
   }, [id]);
+
+  const loadServices = async () => {
+    try {
+      const data = await serviceService.getServices();
+      setServices(data);
+    } catch (error) {
+      console.error("Erreur lors du chargement des services:", error);
+      // Ne pas bloquer si les services ne se chargent pas
+    }
+  };
 
   const loadCourrier = async () => {
     try {
@@ -221,9 +234,31 @@ export default function DetailsCourrier() {
     );
   };
 
-  // Obtenir le label du service
-  const getServiceLabel = (value: string) => {
-    return SERVICE_CHOICES.find((s) => s.value === value)?.label || value;
+  // Obtenir le label du service depuis la base de données
+  const getServiceLabel = (serviceCode: string) => {
+    // Créer un mapping code -> nom de service
+    const codeToNameMapping: Record<string, string> = {
+      'rh': 'Ressources Humaines',
+      'comptabilite': 'Comptabilité',
+      'direction': 'Direction',
+      'technique': 'Service Technique',
+      'commercial': 'Commercial',
+      'juridique': 'Juridique',
+      'informatique': 'Informatique',
+      'logistique': 'Logistique',
+      'autre': 'Autre',
+    };
+
+    // D'abord essayer de trouver le service dans la BDD
+    const serviceName = codeToNameMapping[serviceCode];
+    const service = services.find(s => s.nom === serviceName);
+    
+    if (service) {
+      return service.nom;
+    }
+    
+    // Sinon, utiliser le mapping statique
+    return codeToNameMapping[serviceCode] || serviceCode;
   };
 
   if (loading) {
@@ -281,7 +316,11 @@ export default function DetailsCourrier() {
               {getStatusBadge(courrier.statut)}
             </div>
             <p className="text-muted-foreground mt-1">
-              {courrier.type_courrier === "entrant" ? "Courrier entrant" : "Courrier sortant"}
+              {courrier.type_courrier === "entrant" 
+                ? "Courrier entrant" 
+                : courrier.type_courrier === "sortant" 
+                ? "Courrier sortant" 
+                : "Courrier interne"}
             </p>
           </div>
         </div>

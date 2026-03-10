@@ -1,11 +1,12 @@
 /**
  * Page d'archives des courriers
- * Affiche tous les documents classés par année et mois avec une arborescence visuelle
+ * Affiche tous les courriers avec statut='archive' (traités et classés)
  * Sidebar: Uniquement dossiers (années > mois)
  * Content: Cards des courriers du mois sélectionné avec menu 3 points
  */
 
 import { useState, useEffect, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Calendar,
@@ -21,7 +22,6 @@ import {
   FolderClosed,
   MoreHorizontal,
   Share2,
-  Pencil,
   Grid3x3,
   List,
   GitBranch,
@@ -39,9 +39,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import courrierService from "@/services/courrierService";
 import type { Courrier } from "@/types";
-import { CourrierDetailsDialog } from "@/components/CourrierDetailsDialog";
 import { ShareCourrierDialog } from "@/components/ShareCourrierDialog";
-import { EditCourrierDialog } from "@/components/EditCourrierDialog";
 import { CourrierVersionsDialog } from "@/components/CourrierVersionsDialog";
 import { cn } from "@/lib/utils";
 
@@ -65,6 +63,7 @@ const MONTHS = [
 
 export default function ArchivesPage() {
   const { toast } = useToast();
+  const navigate = useNavigate();
   const [courriers, setCourriers] = useState<Courrier[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -72,9 +71,7 @@ export default function ArchivesPage() {
   const [selectedYearMonth, setSelectedYearMonth] = useState<YearMonth | null>(null);
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [selectedCourrier, setSelectedCourrier] = useState<Courrier | null>(null);
-  const [detailsOpen, setDetailsOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
-  const [editOpen, setEditOpen] = useState(false);
   const [versionsOpen, setVersionsOpen] = useState(false);
 
   useEffect(() => {
@@ -82,13 +79,13 @@ export default function ArchivesPage() {
   }, []);
 
   /**
-   * Charger tous les courriers
+   * Charger tous les courriers archivés (statut='archive')
    */
   const loadCourriers = async () => {
     try {
       setLoading(true);
-      const data = await courrierService.getCourriers({
-        ordering: "-date_principale",
+      const data = await courrierService.getArchivedCourriersByStatus({
+        ordering: "-created_at"
       });
       setCourriers(data);
 
@@ -100,7 +97,7 @@ export default function ArchivesPage() {
       toast({
         variant: "destructive",
         title: "Erreur",
-        description: "Impossible de charger les archives",
+        description: "Impossible de charger les courriers archivés",
       });
     } finally {
       setLoading(false);
@@ -221,10 +218,10 @@ export default function ArchivesPage() {
         <div className="p-4 border-b border-border">
           <h2 className="text-lg font-semibold mb-3 flex items-center gap-2">
             <Calendar className="h-5 w-5 text-primary" />
-            Archives
+            Archives des Courriers
           </h2>
           <p className="text-xs text-muted-foreground">
-            Sélectionnez une période
+            Courriers traités et classés
           </p>
         </div>
 
@@ -236,7 +233,7 @@ export default function ArchivesPage() {
           ) : years.length === 0 ? (
             <div className="text-center py-12">
               <FileText className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-              <p className="text-xs text-muted-foreground">Aucune archive</p>
+              <p className="text-xs text-muted-foreground">Aucun courrier archivé</p>
             </div>
           ) : (
             <div className="space-y-1">
@@ -425,10 +422,7 @@ export default function ArchivesPage() {
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
                         <DropdownMenuItem
-                          onClick={() => {
-                            setSelectedCourrier(courrier);
-                            setDetailsOpen(true);
-                          }}
+                          onClick={() => navigate(`/archives/${courrier.id}`)}
                         >
                           <Eye className="h-4 w-4 mr-2" />
                           Aperçu
@@ -450,11 +444,11 @@ export default function ArchivesPage() {
                         <DropdownMenuItem
                           onClick={() => {
                             setSelectedCourrier(courrier);
-                            setEditOpen(true);
+                            setVersionsOpen(true);
                           }}
                         >
-                          <Pencil className="h-4 w-4 mr-2" />
-                          Modifier
+                          <GitBranch className="h-4 w-4 mr-2" />
+                          Versions
                         </DropdownMenuItem>
                         <DropdownMenuItem
                           onClick={() => {
@@ -472,10 +466,7 @@ export default function ArchivesPage() {
                   {/* Contenu de la card */}
                   <div
                     className="cursor-pointer"
-                    onClick={() => {
-                      setSelectedCourrier(courrier);
-                      setDetailsOpen(true);
-                    }}
+                    onClick={() => navigate(`/archives/${courrier.id}`)}
                   >
                     <div className="flex items-start gap-3 mb-3">
                       <div
@@ -539,10 +530,7 @@ export default function ArchivesPage() {
                 >
                   <div
                     className="flex-1 flex items-center gap-4 cursor-pointer"
-                    onClick={() => {
-                      setSelectedCourrier(courrier);
-                      setDetailsOpen(true);
-                    }}
+                    onClick={() => navigate(`/archives/${courrier.id}`)}
                   >
                     <div
                       className={`p-2 rounded-lg ${
@@ -593,10 +581,7 @@ export default function ArchivesPage() {
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
                       <DropdownMenuItem
-                        onClick={() => {
-                          setSelectedCourrier(courrier);
-                          setDetailsOpen(true);
-                        }}
+                        onClick={() => navigate(`/archives/${courrier.id}`)}
                       >
                         <Eye className="h-4 w-4 mr-2" />
                         Aperçu
@@ -618,11 +603,11 @@ export default function ArchivesPage() {
                       <DropdownMenuItem
                         onClick={() => {
                           setSelectedCourrier(courrier);
-                          setEditOpen(true);
+                          setVersionsOpen(true);
                         }}
                       >
-                        <Pencil className="h-4 w-4 mr-2" />
-                        Modifier
+                        <GitBranch className="h-4 w-4 mr-2" />
+                        Versions
                       </DropdownMenuItem>
                       <DropdownMenuItem
                         onClick={() => {
@@ -643,33 +628,11 @@ export default function ArchivesPage() {
       </div>
 
       {/* Dialogs */}
-      <CourrierDetailsDialog
-        open={detailsOpen}
-        onOpenChange={setDetailsOpen}
-        courrier={selectedCourrier}
-        onStatusChanged={loadCourriers}
-      />
-
       {shareOpen && selectedCourrier && (
         <ShareCourrierDialog
           open={shareOpen}
           onOpenChange={setShareOpen}
           courrier={selectedCourrier}
-        />
-      )}
-
-      {editOpen && selectedCourrier && (
-        <EditCourrierDialog
-          open={editOpen}
-          onOpenChange={setEditOpen}
-          courrier={selectedCourrier}
-          onSuccess={() => {
-            loadCourriers();
-            toast({
-              title: "Succès",
-              description: "Courrier modifié avec succès",
-            });
-          }}
         />
       )}
 

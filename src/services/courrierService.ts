@@ -4,7 +4,7 @@
  */
 
 import { api } from './index';
-import type { Courrier, CourrierCreate, CourrierStatistics } from '@/types';
+import type { Courrier, CourrierCreate, CourrierStatistics, CourrierFilters } from '@/types';
 
 /**
  * Service complet pour la gestion des courriers
@@ -14,18 +14,22 @@ const courrierService = {
    * Récupérer tous les courriers avec filtres optionnels
    * @param params - Paramètres de filtrage (type, statut, service, recherche, dates)
    */
-  getCourriers: async (params?: {
-    type_courrier?: string;
-    statut?: string;
-    service_concerne?: string;
-    search?: string;
-    date_debut?: string;
-    date_fin?: string;
-    ordering?: string;
-  }): Promise<Courrier[]> => {
+  getCourriers: async (params?: CourrierFilters): Promise<Courrier[]> => {
     const response = await api.get('/courriers/', { params });
     // L'API retourne une structure paginée {count, next, previous, results}
     return response.data.results || response.data;
+  },
+
+  /**
+   * Récupérer mes courriers (seulement ceux affectés à l'utilisateur connecté)
+   * @param params - Paramètres de filtrage (recherche, ordre)
+   */
+  getMesCourriers: async (params?: {
+    search?: string;
+    ordering?: string;
+  }): Promise<Courrier[]> => {
+    const response = await api.get('/courriers/mes_courriers/', { params });
+    return response.data;
   },
 
   /**
@@ -61,11 +65,48 @@ const courrierService = {
   },
 
   /**
-   * Supprimer un courrier
-   * @param id - ID du courrier à supprimer
+   * Archiver un courrier (soft delete)
+   * @param id - ID du courrier à archiver
    */
   deleteCourrier: async (id: number): Promise<void> => {
     await api.delete(`/courriers/${id}/`);
+  },
+
+  /**
+   * Récupérer les courriers archivés (is_deleted=True - Corbeille)
+   */
+  getArchivedCourriers: async (): Promise<Courrier[]> => {
+    const response = await api.get<Courrier[]>('/courriers/archives/');
+    return response.data;
+  },
+
+  /**
+   * Récupérer les courriers archivés par statut (statut='archive' - Courriers traités et classés)
+   */
+  getArchivedCourriersByStatus: async (params?: {
+    search?: string;
+    ordering?: string;
+  }): Promise<Courrier[]> => {
+    const response = await api.get<Courrier[]>('/courriers/archives-status/', { params });
+    return response.data;
+  },
+
+  /**
+   * Restaurer un courrier archivé (de la corbeille)
+   * @param id - ID du courrier à restaurer
+   */
+  restoreCourrier: async (id: number): Promise<Courrier> => {
+    const response = await api.post<{ message: string; courrier: Courrier }>(`/courriers/${id}/restore/`);
+    return response.data.courrier;
+  },
+
+  /**
+   * Récupérer toutes les versions d'un courrier (nouveau endpoint simplifié)
+   * @param id - ID du courrier
+   */
+  getCourrierVersions: async (id: number): Promise<Courrier[]> => {
+    const response = await api.get<Courrier[]>(`/courriers/${id}/versions/`);
+    return response.data;
   },
 
   /**
@@ -106,9 +147,11 @@ const courrierService = {
     type_courrier?: string;
     statut?: string;
     service_concerne?: string;
+    service?: number;
     search?: string;
     date_debut?: string;
     date_fin?: string;
+    urgent?: boolean;
   }): Promise<Blob> => {
     const response = await api.get('/courriers/export_excel/', {
       params,
@@ -193,13 +236,13 @@ const courrierService = {
   },
 
   /**
-   * Affecter un courrier à un service et envoyer par email
+   * Affecter un courrier à un service et envoyer par email (externe)
    * @param courrierId - ID du courrier
    * @param service - Code du service
    * @param destinataireEmail - Email du destinataire
    * @param message - Message personnalisé
    */
-  affecterService: async (courrierId: number, service: string, destinataireEmail: string, message: string): Promise<{ success: boolean; message: string }> => {
+  affecterServiceParEmail: async (courrierId: number, service: string, destinataireEmail: string, message: string): Promise<{ success: boolean; message: string }> => {
     // 1. Mettre à jour le service concerné
     await api.patch(`/courriers/${courrierId}/`, { service_concerne: service });
     
@@ -211,6 +254,132 @@ const courrierService = {
     });
     
     return response.data;
+  },
+
+  /**
+   * Affecter un courrier à un service via la plateforme
+   * Crée une affectation pour chaque utilisateur du service
+   * @param courrierId - ID du courrier
+   * @param serviceId - ID du service
+   * @param note - Note optionnelle pour les utilisateurs
+   */
+  affecterServicePlateforme: async (courrierId: number, serviceId: number, note?: string): Promise<{ success: boolean; message: string; nombre_affectations: number }> => {
+    const response = await api.post(`/courriers/${courrierId}/affecter_service/`, {
+      service_id: serviceId,
+      note: note || '',
+    });
+    
+    return {
+      success: true,
+      message: response.data.message,
+      nombre_affectations: response.data.utilisateurs_affectes
+    };
+  },
+
+  /**
+   * Affecter un courrier à un utilisateur via la plateforme
+   * @param courrierId - ID du courrier
+   * @param utilisateurId - ID de l'utilisateur
+   * @param note - Note optionnelle pour l'utilisateur
+   */
+  affecterUtilisateur: async (courrierId: number, utilisateurId: number, note?: string): Promise<{ success: boolean; message: string }> => {
+    const response = await api.post('/affectations/', {
+      courrier: courrierId,
+      utilisateur: utilisateurId,
+      note: note || '',
+    });
+    
+    return {
+      success: true,
+      message: 'Affectation créée avec succès'
+    };
+  },
+
+  /**
+   * Récupérer les courriers affectés à l'utilisateur connecté
+   * @param statut - Filtre optionnel par statut (en_attente, lu, valide, rejete, signe)
+   */
+  getMesAffectations: async (statut?: string): Promise<any[]> => {
+    const params = statut ? { statut } : undefined;
+    const response = await api.get('/courriers/mes_affectations/', { params });
+    return response.data;
+  },
+
+  /**
+   * Récupérer la liste des services disponibles pour l'affectation
+   */
+  getServicesDisponibles: async (): Promise<any[]> => {
+    const response = await api.get('/courriers/services_disponibles/');
+    return response.data;
+  },
+
+  /**
+   * Marquer une affectation comme lue
+   * @param affectationId - ID de l'affectation
+   */
+  marquerAffectationLue: async (affectationId: number): Promise<void> => {
+    await api.post(`/affectations/${affectationId}/marquer_lu/`);
+  },
+
+  /**
+   * Traiter une affectation de courrier (valider, rejeter ou signer)
+   * @param affectationId - ID de l'affectation
+   * @param action - Action à effectuer (valider, rejeter, signer)
+   * @param commentaire - Commentaire optionnel
+   * @param motifRejet - Motif de rejet (requis si action = rejeter)
+   * @param position - Position de la signature (pour action = signer)
+   * @param size - Taille de la signature (pour action = signer)
+   */
+  traiterAffectation: async (
+    affectationId: number,
+    action: 'valider' | 'rejeter' | 'signer',
+    commentaire?: string,
+    motifRejet?: string,
+    position?: { x: number; y: number },
+    size?: { width: number; height: number }
+  ): Promise<{ message: string; statut: string }> => {
+    let response;
+    
+    switch (action) {
+      case 'valider':
+        response = await api.post(`/affectations/${affectationId}/valider/`, {
+          commentaire: commentaire || '',
+        });
+        break;
+      case 'rejeter':
+        response = await api.post(`/affectations/${affectationId}/rejeter/`, {
+          motif: motifRejet || '',
+        });
+        break;
+      case 'signer':
+        response = await api.post(`/affectations/${affectationId}/signer/`, {
+          commentaire: commentaire || '',
+          position: position || { x: 100, y: 100 },
+          size: size || { width: 200, height: 80 },
+        });
+        break;
+    }
+    
+    return {
+      message: 'Action effectuée avec succès',
+      statut: response.data.statut
+    };
+  },
+
+  /**
+   * Ajouter un commentaire à une affectation de courrier
+   * @param affectationId - ID de l'affectation
+   * @param contenu - Contenu du commentaire
+   */
+  commenterAffectation: async (affectationId: number, contenu: string): Promise<{ message: string; commentaire: any }> => {
+    const response = await api.post(`/affectations/${affectationId}/commentaires/`, {
+      contenu,
+    });
+    
+    return {
+      message: 'Commentaire ajouté avec succès',
+      commentaire: response.data
+    };
   },
 };
 

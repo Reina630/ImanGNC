@@ -14,6 +14,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
+import NotificationsDropdown from "@/components/NotificationsDropdown";
 
 interface TopBarProps {
   onMobileMenuToggle?: () => void;
@@ -93,19 +94,16 @@ export default function TopBar({ onMobileMenuToggle }: TopBarProps) {
           <span className="hidden md:inline">Importer</span>
         </Button> */}
 
-        <Button size="sm" variant="outline" className="hidden sm:flex gap-2">
+        {/* <Button size="sm" variant="outline" className="hidden sm:flex gap-2">
           <ScanLine className="h-4 w-4" />
           <span className="hidden md:inline">Scanner</span>
-        </Button>
+        </Button> */}
 
-        <button onClick={toggleDark} className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
+        {/* <button onClick={toggleDark} className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
           {darkMode ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-        </button>
+        </button> */}
 
-        <button className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors relative">
-          <Bell className="h-4 w-4" />
-          <span className="absolute top-1.5 right-1.5 h-2 w-2 bg-primary rounded-full" />
-        </button>
+        <NotificationsDropdown />
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>

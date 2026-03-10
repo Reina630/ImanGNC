@@ -13,8 +13,13 @@ import {
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { 
-  BarChart, 
-  Bar, 
+  AreaChart,
+  Area,
+  PieChart,
+  Pie,
+  Cell,
+  BarChart,
+  Bar,
   XAxis, 
   YAxis, 
   Tooltip, 
@@ -128,6 +133,40 @@ export default function Dashboard() {
     }))
   ).sort().reverse();
 
+  // Préparer les données pour le camembert des statuts
+  const statutsData = [
+    { 
+      name: 'Reçus', 
+      value: statistics?.par_statut?.recu?.count || 0,
+      color: 'hsl(210, 80%, 52%)'
+    },
+    { 
+      name: 'En traitement', 
+      value: statistics?.par_statut?.en_traitement?.count || 0,
+      color: 'hsl(38, 92%, 50%)'
+    },
+    { 
+      name: 'Traités', 
+      value: statistics?.par_statut?.traite?.count || 0,
+      color: 'hsl(152, 60%, 40%)'
+    },
+    { 
+      name: 'Archivés', 
+      value: statistics?.par_statut?.archive?.count || 0,
+      color: 'hsl(340, 8%, 46%)'
+    },
+  ].filter(item => item.value > 0);
+
+  // Préparer les données pour le graphique des services
+  const servicesData = Object.entries(statistics?.par_service || {})
+    .map(([service, data]: [string, any]) => ({
+      service: service.length > 20 ? service.substring(0, 20) + '...' : service,
+      serviceFull: service,
+      count: data.count || 0,
+    }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 8); // Top 8 services
+
   return (
     <motion.div variants={container} initial="hidden" animate="show" className="space-y-6">
       {/* En-tête */}
@@ -152,79 +191,83 @@ export default function Dashboard() {
 
       {/* Statistiques principales */}
       <motion.div variants={item} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="stat-card flex items-start justify-between">
+        {/* Total courriers */}
+        <div className="stat-card flex items-start justify-between" style={{ background: 'hsl(340, 96%, 27%)', color: 'white' }}>
           <div>
-            <p className="text-sm text-muted-foreground">Total courriers</p>
-            <p className="text-2xl font-bold mt-1">
+            <p className="text-sm opacity-90">Total courriers</p>
+            <p className="text-3xl font-bold mt-1">
               {loading ? "..." : statistics?.total || 0}
             </p>
-            <span className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+            <span className="text-xs opacity-80 mt-1 flex items-center gap-1">
               <Calendar className="h-3 w-3" />
               Tous les temps
             </span>
           </div>
-          <div className="p-2.5 rounded-lg bg-primary/10">
-            <Mail className="h-5 w-5 text-primary" />
+          <div className="p-3 rounded-lg bg-white/20">
+            <Mail className="h-6 w-6" />
           </div>
         </div>
 
-        <div className="stat-card flex items-start justify-between">
+          {/* Courriers entrants */}
+          <div className="stat-card flex items-start justify-between" style={{ background: 'hsl(210,80%,58%)', color: 'white' }}>
           <div>
-            <p className="text-sm text-muted-foreground">Courriers entrants</p>
-            <p className="text-2xl font-bold mt-1 text-blue-600">
+            <p className="text-sm opacity-90">Courriers entrants</p>
+            <p className="text-3xl font-bold mt-1">
               {loading ? "..." : statistics?.entrants || 0}
             </p>
-            <span className="text-xs text-blue-600 flex items-center gap-1 mt-1">
+            <span className="text-xs opacity-80 mt-1 flex items-center gap-1">
               <TrendingUp className="h-3 w-3" />
               Reçus
             </span>
           </div>
-          <div className="p-2.5 rounded-lg bg-blue-100">
-            <Inbox className="h-5 w-5 text-blue-600" />
+          <div className="p-3 rounded-lg bg-white/20">
+            <Inbox className="h-6 w-6" />
           </div>
         </div>
 
-        <div className="stat-card flex items-start justify-between">
+          {/* Courriers sortants */}
+          <div className="stat-card flex items-start justify-between" style={{ background: 'hsl(152,60%,46%)', color: 'white' }}>
           <div>
-            <p className="text-sm text-muted-foreground">Courriers sortants</p>
-            <p className="text-2xl font-bold mt-1 text-orange-600">
+            <p className="text-sm opacity-90">Courriers sortants</p>
+            <p className="text-3xl font-bold mt-1">
               {loading ? "..." : statistics?.sortants || 0}
             </p>
-            <span className="text-xs text-orange-600 flex items-center gap-1 mt-1">
+            <span className="text-xs opacity-80 mt-1 flex items-center gap-1">
               <TrendingUp className="h-3 w-3" />
               Envoyés
             </span>
           </div>
-          <div className="p-2.5 rounded-lg bg-orange-100">
-            <Send className="h-5 w-5 text-orange-600" />
+          <div className="p-3 rounded-lg bg-white/20">
+            <Send className="h-6 w-6" />
           </div>
         </div>
 
-        <div className="stat-card flex items-start justify-between cursor-pointer hover:shadow-lg transition-shadow" onClick={() => navigate("/courriers/prioritaires")}>
+          {/* Courriers urgents */}
+          <div className="stat-card flex items-start justify-between cursor-pointer" style={{ background: 'hsl(38,92%,56%)', color: 'white' }} onClick={() => navigate("/courriers/prioritaires")}> 
           <div>
-            <p className="text-sm text-muted-foreground">Courriers urgents</p>
-            <p className="text-2xl font-bold mt-1 text-red-600">
+            <p className="text-sm opacity-90">Courriers urgents</p>
+            <p className="text-3xl font-bold mt-1">
               {loading ? "..." : statistics?.urgents || 0}
             </p>
-            <span className="text-xs text-red-600 flex items-center gap-1 mt-1">
+            <span className="text-xs opacity-80 mt-1 flex items-center gap-1">
               <Zap className="h-3 w-3" />
               Prioritaires
             </span>
           </div>
-          <div className="p-2.5 rounded-lg bg-red-100">
-            <AlertCircle className="h-5 w-5 text-red-600" />
+          <div className="p-3 rounded-lg bg-white/20">
+            <AlertCircle className="h-6 w-6" />
           </div>
         </div>
       </motion.div>
 
-      {/* Graphique à barres + Courriers récents */}
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
-        {/* Graphique à barres - 3/4 de la largeur */}
-        <motion.div variants={item} className="stat-card lg:col-span-3">
+      {/* Graphique d'évolution + Récents */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* Graphique d'évolution - 2/3 */}
+        <motion.div variants={item} className="stat-card lg:col-span-2">
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-semibold flex items-center gap-2">
               <BarChart3 className="h-4 w-4 text-primary" />
-              Courriers par mois
+              Évolution des courriers
             </h3>
             <div className="flex items-center gap-2">
               <Select value={periodeFiltre} onValueChange={setPeriodeFiltre}>
@@ -255,35 +298,51 @@ export default function Dashboard() {
             </div>
           </div>
           {loading || filteredData.length === 0 ? (
-            <div className="h-[350px] flex items-center justify-center text-muted-foreground">
+            <div className="h-[280px] flex items-center justify-center text-muted-foreground">
               {loading ? "Chargement..." : "Aucune donnée pour cette période"}
             </div>
           ) : (
-            <ResponsiveContainer width="100%" height={350}>
-              <BarChart data={filteredData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="mois" />
-                <YAxis />
+            <ResponsiveContainer width="100%" height={280}>
+              <AreaChart data={filteredData}>
+                <defs>
+                  <linearGradient id="colorEntrants" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="hsl(210, 80%, 52%)" stopOpacity={0.8}/>
+                    <stop offset="95%" stopColor="hsl(210, 80%, 52%)" stopOpacity={0.1}/>
+                  </linearGradient>
+                  <linearGradient id="colorSortants" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="hsl(152, 60%, 40%)" stopOpacity={0.8}/>
+                    <stop offset="95%" stopColor="hsl(152, 60%, 40%)" stopOpacity={0.1}/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(340, 10%, 90%)" />
+                <XAxis dataKey="mois" stroke="hsl(340, 8%, 46%)" />
+                <YAxis stroke="hsl(340, 8%, 46%)" />
                 <Tooltip />
                 <Legend />
-                <Bar
+                <Area
+                  type="monotone"
                   dataKey="entrants"
-                  fill="#3b82f6"
+                  stroke="hsl(210, 80%, 52%)"
+                  strokeWidth={2}
+                  fillOpacity={1}
+                  fill="url(#colorEntrants)"
                   name="Entrants"
-                  radius={[4, 4, 0, 0]}
                 />
-                <Bar
+                <Area
+                  type="monotone"
                   dataKey="sortants"
-                  fill="#ef4444"
+                  stroke="hsl(152, 60%, 40%)"
+                  strokeWidth={2}
+                  fillOpacity={1}
+                  fill="url(#colorSortants)"
                   name="Sortants"
-                  radius={[4, 4, 0, 0]}
                 />
-              </BarChart>
+              </AreaChart>
             </ResponsiveContainer>
           )}
         </motion.div>
 
-        {/* Courriers récents - 1/4 de la largeur */}
+        {/* Courriers récents - 1/3 */}
         <motion.div variants={item} className="stat-card lg:col-span-1">
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-semibold flex items-center gap-2">
@@ -301,7 +360,7 @@ export default function Dashboard() {
           {loading ? (
             <div className="text-center py-8 text-muted-foreground">Chargement...</div>
           ) : recentCourriers.length > 0 ? (
-            <div className="space-y-3">
+            <div className="space-y-2.5 max-h-[280px] overflow-y-auto pr-2">
               {recentCourriers.map((courrier) => (
                 <div
                   key={courrier.id}
@@ -311,13 +370,13 @@ export default function Dashboard() {
                   <div className="flex items-start gap-2">
                     <div className={`p-1.5 rounded ${
                       courrier.type_courrier === "entrant" 
-                        ? "bg-blue-100" 
-                        : "bg-orange-100"
+                        ? "bg-[hsl(210,80%,52%)] text-white" 
+                        : "bg-[hsl(152,60%,40%)] text-white"
                     }`}>
                       {courrier.type_courrier === "entrant" ? (
-                        <Inbox className="h-3 w-3 text-blue-600" />
+                        <Inbox className="h-3 w-3" />
                       ) : (
-                        <Send className="h-3 w-3 text-orange-600" />
+                        <Send className="h-3 w-3" />
                       )}
                     </div>
                     <div className="flex-1 min-w-0">
@@ -341,6 +400,95 @@ export default function Dashboard() {
             <div className="text-center py-8 text-muted-foreground text-sm">
               Aucun courrier
             </div>
+          )}
+        </motion.div>
+      </div>
+
+      {/* Répartition par statut et par service */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Camembert - Répartition par statut */}
+        <motion.div variants={item} className="stat-card">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-semibold flex items-center gap-2">
+              <BarChart3 className="h-4 w-4 text-primary" />
+              Répartition par statut
+            </h3>
+          </div>
+          {loading || statutsData.length === 0 ? (
+            <div className="h-[280px] flex items-center justify-center text-muted-foreground">
+              {loading ? "Chargement..." : "Aucune donnée disponible"}
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height={280}>
+              <PieChart>
+                <Pie
+                  data={statutsData}
+                  cx="50%"
+                  cy="50%"
+                  labelLine={false}
+                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                  outerRadius={90}
+                  fill="#8884d8"
+                  dataKey="value"
+                >
+                  {statutsData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.color} />
+                  ))}
+                </Pie>
+                <Tooltip />
+                <Legend />
+              </PieChart>
+            </ResponsiveContainer>
+          )}
+        </motion.div>
+
+        {/* Graphique en barres - Distribution par service */}
+        <motion.div variants={item} className="stat-card">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-semibold flex items-center gap-2">
+              <BarChart3 className="h-4 w-4 text-primary" />
+              Distribution par service
+            </h3>
+          </div>
+          {loading || servicesData.length === 0 ? (
+            <div className="h-[280px] flex items-center justify-center text-muted-foreground">
+              {loading ? "Chargement..." : "Aucune donnée disponible"}
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height={280}>
+              <BarChart data={servicesData} layout="vertical">
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(340, 10%, 90%)" />
+                <XAxis type="number" stroke="hsl(340, 8%, 46%)" />
+                <YAxis
+                  dataKey="service"
+                  type="category"
+                  width={100}
+                  stroke="hsl(340, 8%, 46%)"
+                  tick={{ fontSize: 12 }}
+                />
+                <Tooltip
+                  content={({ active, payload }) => {
+                    if (active && payload && payload.length) {
+                      return (
+                        <div className="bg-white p-2 border rounded shadow-lg">
+                          <p className="font-medium">{payload[0].payload.serviceFull}</p>
+                          <p className="text-sm text-muted-foreground">
+                            {payload[0].value} courriers
+                          </p>
+                        </div>
+                      );
+                    }
+                    return null;
+                  }}
+                />
+                <Bar
+                  dataKey="count"
+                  fill="hsl(340, 61%, 36%)"
+                  radius={[0, 4, 4, 0]}
+                  name="Courriers"
+                />
+              </BarChart>
+            </ResponsiveContainer>
           )}
         </motion.div>
       </div>

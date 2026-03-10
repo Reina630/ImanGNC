@@ -405,13 +405,18 @@ export default function MobileScanPage() {
                   <SelectContent>
                     <SelectItem value="entrant">Courrier Entrant</SelectItem>
                     <SelectItem value="sortant">Courrier Sortant</SelectItem>
+                    <SelectItem value="interne">Courrier Interne</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
 
               <div className="space-y-2">
                 <Label>
-                  {formData.type_courrier === "entrant" ? "Date de réception" : "Date d'envoi"} *
+                  {formData.type_courrier === "entrant" 
+                    ? "Date de réception" 
+                    : formData.type_courrier === "sortant"
+                    ? "Date d'envoi"
+                    : "Date du courrier"} *
                 </Label>
                 <Input
                   type="date"

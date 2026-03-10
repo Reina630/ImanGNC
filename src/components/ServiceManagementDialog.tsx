@@ -11,54 +11,54 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { useCreateCategory, useUpdateCategory } from "@/services/categoryHooks";
-import type { Categorie } from "@/types";
+import { useCreateService, useUpdateService } from "@/services/serviceHooks";
+import type { Service } from "@/services/serviceService";
 import { Loader2 } from "lucide-react";
 
-interface CategoryManagementDialogProps {
+interface ServiceManagementDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  category?: Categorie | null;
+  service?: Service | null;
   onSuccess?: () => void;
 }
 
-export function CategoryManagementDialog({
+export function ServiceManagementDialog({
   open,
   onOpenChange,
-  category,
+  service,
   onSuccess,
-}: CategoryManagementDialogProps) {
-  const createMutation = useCreateCategory();
-  const updateMutation = useUpdateCategory();
+}: ServiceManagementDialogProps) {
+  const createMutation = useCreateService();
+  const updateMutation = useUpdateService();
   const [formData, setFormData] = useState({
-    name: "",
+    nom: "",
     description: "",
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  // Pré-remplir le formulaire si on édite une catégorie
+  // Pré-remplir le formulaire si on édite un service
   useEffect(() => {
     if (open) {
-      if (category) {
+      if (service) {
         setFormData({
-          name: category.name,
-          description: category.description || "",
+          nom: service.nom,
+          description: service.description || "",
         });
       } else {
         setFormData({
-          name: "",
+          nom: "",
           description: "",
         });
       }
       setErrors({});
     }
-  }, [open, category]);
+  }, [open, service]);
 
   const validateForm = (): boolean => {
     const newErrors: Record<string, string> = {};
 
-    if (!formData.name.trim()) {
-      newErrors.name = "Le nom est obligatoire";
+    if (!formData.nom.trim()) {
+      newErrors.nom = "Le nom est obligatoire";
     }
 
     setErrors(newErrors);
@@ -72,23 +72,28 @@ export function CategoryManagementDialog({
       return;
     }
 
-    if (category) {
-      // Modification
-      await updateMutation.mutateAsync({
-        id: category.id,
-        name: formData.name,
-        description: formData.description,
-      });
-    } else {
-      // Création
-      await createMutation.mutateAsync({
-        name: formData.name,
-        description: formData.description,
-      });
-    }
+    try {
+      if (service) {
+        // Modification
+        await updateMutation.mutateAsync({
+          id: service.id,
+          nom: formData.nom,
+          description: formData.description
+        });
+      } else {
+        // Création
+        await createMutation.mutateAsync({ 
+          nom: formData.nom, 
+          description: formData.description 
+        });
+      }
 
-    onOpenChange(false);
-    onSuccess?.();
+      onOpenChange(false);
+      onSuccess?.();
+    } catch (error) {
+      // L'erreur est déjà gérée par le hook
+      console.error("Erreur lors de la gestion du service:", error);
+    }
   };
 
   const isPending = createMutation.isPending || updateMutation.isPending;
@@ -98,32 +103,32 @@ export function CategoryManagementDialog({
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
           <DialogTitle>
-            {category ? "Modifier la catégorie" : "Nouvelle catégorie"}
+            {service ? "Modifier le service" : "Nouveau service"}
           </DialogTitle>
           <DialogDescription>
-            {category
-              ? "Modifiez les informations de la catégorie"
-              : "Ajoutez une nouvelle catégorie de courrier"}
+            {service
+              ? "Modifiez les informations du service"
+              : "Ajoutez un nouveau service de l'organisation"}
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Nom */}
           <div className="space-y-2">
-            <Label htmlFor="name" className="required">
-              Nom de la catégorie
+            <Label htmlFor="nom" className="required">
+              Nom du service
             </Label>
             <Input
-              id="name"
-              placeholder="Ex: Devis, Facture, Demande..."
-              value={formData.name}
+              id="nom"
+              placeholder="Ex: Ressources Humaines, Comptabilité, IT..."
+              value={formData.nom}
               onChange={(e) =>
-                setFormData({ ...formData, name: e.target.value })
+                setFormData({ ...formData, nom: e.target.value })
               }
-              className={errors.name ? "border-red-500" : ""}
+              className={errors.nom ? "border-red-500" : ""}
             />
-            {errors.name && (
-              <p className="text-sm text-red-500">{errors.name}</p>
+            {errors.nom && (
+              <p className="text-sm text-red-500">{errors.nom}</p>
             )}
           </div>
 
@@ -132,7 +137,7 @@ export function CategoryManagementDialog({
             <Label htmlFor="description">Description (optionnel)</Label>
             <Textarea
               id="description"
-              placeholder="Description de la catégorie..."
+              placeholder="Description du service..."
               value={formData.description}
               onChange={(e) =>
                 setFormData({ ...formData, description: e.target.value })
@@ -156,7 +161,7 @@ export function CategoryManagementDialog({
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                   Enregistrement...
                 </>
-              ) : category ? (
+              ) : service ? (
                 "Modifier"
               ) : (
                 "Créer"

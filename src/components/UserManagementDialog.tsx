@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { X, Loader2, User as UserIcon, Mail, Lock, Shield } from "lucide-react";
+import { X, Loader2, User as UserIcon, Mail, Lock, Shield, Building2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -11,6 +11,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useCreateUser, useUpdateUser } from "@/services";
+import { useServices } from "@/services/serviceHooks";
 import type { User } from "@/types";
 
 interface UserManagementDialogProps {
@@ -25,10 +26,12 @@ export function UserManagementDialog({ open, onOpenChange, user }: UserManagemen
     email: "",
     password: "",
     role: "client" as "admin" | "collaborator" | "client",
+    service: null as number | null,
   });
 
   const createMutation = useCreateUser();
   const updateMutation = useUpdateUser();
+  const { data: services = [] } = useServices();
 
   // Pré-remplir le formulaire si on édite
   useEffect(() => {
@@ -38,6 +41,7 @@ export function UserManagementDialog({ open, onOpenChange, user }: UserManagemen
         email: user.email,
         password: "",
         role: user.role,
+        service: (user as any).service || null,
       });
     } else {
       setFormData({
@@ -45,6 +49,7 @@ export function UserManagementDialog({ open, onOpenChange, user }: UserManagemen
         email: "",
         password: "",
         role: "client",
+        service: null,
       });
     }
   }, [user, open]);
@@ -55,13 +60,17 @@ export function UserManagementDialog({ open, onOpenChange, user }: UserManagemen
       if (!formData.username || !formData.email || !formData.password) {
         return;
       }
-      await createMutation.mutateAsync(formData);
+      await createMutation.mutateAsync({
+        ...formData,
+        service: formData.service || undefined,
+      });
     } else {
       // Modification (sans le password s'il est vide)
       const updateData: any = {
         username: formData.username,
         email: formData.email,
         role: formData.role,
+        service: formData.service || null,
       };
       if (formData.password) {
         updateData.password = formData.password;
@@ -146,6 +155,28 @@ export function UserManagementDialog({ open, onOpenChange, user }: UserManagemen
               {formData.role === "admin" && "Accès complet au système, gestion des utilisateurs"}
               {formData.role === "collaborator" && "Peut créer, modifier et supprimer des documents"}
               {formData.role === "client" && "Peut uniquement consulter les documents partagés"}
+            </p>
+          </div>
+
+          <div>
+            <label className="text-sm font-medium mb-2 block">
+              <Building2 className="h-3.5 w-3.5 inline mr-1" />
+              Service
+            </label>
+            <select
+              value={formData.service || ""}
+              onChange={(e) => setFormData({ ...formData, service: e.target.value ? parseInt(e.target.value) : null })}
+              className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm"
+            >
+              <option value="">Aucun service</option>
+              {services.map((service) => (
+                <option key={service.id} value={service.id}>
+                  {service.nom}
+                </option>
+              ))}
+            </select>
+            <p className="text-xs text-muted-foreground mt-1">
+              Les utilisateurs d'un service verront les courriers qui leur sont affectés
             </p>
           </div>
         </div>

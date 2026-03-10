@@ -94,6 +94,46 @@ export const authService = {
       return null;
     }
   },
+
+  /**
+   * Mettre à jour la signature électronique et le mot de passe
+   */
+  async updateSignature(signatureFile?: File, password?: string): Promise<User> {
+    const formData = new FormData();
+    
+    if (signatureFile) {
+      formData.append('signature_electronique', signatureFile);
+    }
+    
+    if (password) {
+      formData.append('signature_password', password);
+    }
+    
+    const response = await api.post<User>('/users/signature/', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    
+    // Mettre à jour le localStorage
+    localStorage.setItem('user', JSON.stringify(response.data));
+    
+    return response.data;
+  },
+
+  /**
+   * Vérifier le mot de passe de signature
+   */
+  async verifySignaturePassword(password: string): Promise<boolean> {
+    try {
+      const response = await api.post<{ valid: boolean }>('/users/signature/verify/', {
+        password,
+      });
+      return response.data.valid;
+    } catch (error) {
+      return false;
+    }
+  },
 };
 
 export default authService;
