@@ -315,6 +315,18 @@ export const SERVICE_CHOICES = [
 ] as const;
 
 /**
+ * Choix pour les modes de réception/envoi
+ */
+export const MODE_CHOICES = [
+  { value: 'postal', label: 'Courrier postal' },
+  { value: 'email', label: 'Email' },
+  { value: 'fax', label: 'Fax' },
+  { value: 'main_propre', label: 'Remise en main propre' },
+  { value: 'coursier', label: 'Coursier' },
+  { value: 'autre', label: 'Autre' },
+] as const;
+
+/**
  * Choix pour les statuts
  */
 export const STATUT_CHOICES = [

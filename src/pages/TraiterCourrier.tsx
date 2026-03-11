@@ -31,7 +31,9 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import courrierService from "@/services/courrierService";
+import api from "@/services/api";
 import { SignatureDialog } from "@/components/SignatureDialog";
+import { AffecterServiceDialog } from "@/components/AffecterServiceDialog";
 import { useAuth } from "@/contexts/AuthContext";
 
 // Types
@@ -86,6 +88,7 @@ export default function TraiterCourrier() {
   const [downloading, setDownloading] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string>("");
   const [signatureDialogOpen, setSignatureDialogOpen] = useState(false);
+  const [reaffecterDialogOpen, setReaffecterDialogOpen] = useState(false);
 
   // Charger le courrier depuis l'API
   useEffect(() => {
@@ -130,7 +133,7 @@ export default function TraiterCourrier() {
                     affectation.statut === 'valide' ? 'valide' :
                     affectation.statut === 'rejete' ? 'rejete' : 'signe',
             urgent: courrierComplet.urgent || false,
-            commentaires: [],
+            commentaires: await chargerCommentaires(affectation.id),
             pieceJointe: courrierComplet.fichier,
             categorie: courrierComplet.categorie_name,
             description: '',
@@ -155,6 +158,27 @@ export default function TraiterCourrier() {
   }, [id, navigate]);
 
   // Actions
+  const chargerCommentaires = async (affectationId: number) => {
+    try {
+      const response = await api.get(`/affectations/${affectationId}/commentaires/`);
+      return response.data.map((c: any) => ({
+        id: c.id,
+        auteur: c.auteur_nom_complet || c.auteur_username,
+        contenu: c.contenu,
+        date: new Date(c.date_creation).toLocaleString('fr-FR', {
+          day: '2-digit',
+          month: '2-digit',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit'
+        })
+      }));
+    } catch (error) {
+      console.error("Erreur lors du chargement des commentaires:", error);
+      return [];
+    }
+  };
+
   const handleAddComment = async () => {
     if (!courrier || !newComment.trim()) return;
 
@@ -164,36 +188,10 @@ export default function TraiterCourrier() {
         newComment
       );
 
-      // Recharger le courrier
-      const affectations = await courrierService.getMesAffectations();
-      const affectation = affectations.find((a: any) => a.courrier === courrier.id);
+      // Recharger les commentaires
+      const commentairesRefresh = await chargerCommentaires(courrier.affectation_id);
       
-      if (affectation) {
-        const mappedData: AffectationCourrier = {
-          id: affectation.courrier,
-          affectation_id: affectation.id,
-          numero: affectation.courrier_numero || affectation.courrier_details?.numero_registre || '',
-          objet: affectation.courrier_objet || affectation.courrier_details?.objet || '',
-          expediteur: affectation.courrier_details?.expediteur || affectation.courrier_details?.service_expediteur || "Service RH",
-          destinataire: affectation.courrier_details?.destinataire || '',
-          type: affectation.courrier_details?.type_courrier || 'entrant',
-          dateReception: affectation.courrier_details?.date_reception || affectation.courrier_details?.created_at?.split('T')[0] || '',
-          statut: affectation.statut === 'en_attente' ? 'en_attente' : 
-                  affectation.statut === 'lu' ? 'en_attente' :
-                  affectation.statut === 'valide' ? 'valide' :
-                  affectation.statut === 'rejete' ? 'rejete' : 'signe',
-          urgent: affectation.courrier_details?.urgent || false,
-          commentaires: [],
-          pieceJointe: affectation.courrier_details?.fichier_url || affectation.courrier_details?.fichier,
-          categorie: affectation.courrier_details?.categorie_nom,
-          description: affectation.courrier_details?.description || '',
-          note: affectation.note || '',
-          date_affectation: affectation.date_affectation,
-          affecte_par: affectation.affecte_par_nom_complet || affectation.affecte_par_username,
-        };
-        setCourrier(mappedData);
-      }
-
+      setCourrier(prev => prev ? { ...prev, commentaires: commentairesRefresh } : prev);
       setNewComment("");
       toast.success("Commentaire ajouté avec succès");
       setIsCommentDialogOpen(false);
@@ -289,45 +287,52 @@ export default function TraiterCourrier() {
         signatureData.size
       );
 
-      toast.success("Document signé avec succès");
+      setSignatureDialogOpen(false);
+      toast.success("Document signé avec succès - Nouvelle version créée");
       
-      // Recharger le courrier pour voir le PDF mis à jour
-      setTimeout(async () => {
-        const affectations = await courrierService.getMesAffectations();
-        const affectation = affectations.find((a: any) => a.courrier === courrier.id);
+      // Forcer le rechargement du PDF en vidant d'abord l'URL
+      setPreviewUrl("");
+      
+      // Attendre un court instant pour que le backend finalize la sauvegarde
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // Recharger le courrier pour voir la nouvelle version du fichier signé
+      const courrierComplet = await courrierService.getCourrier(courrier.id);
+      
+      // Recharger les données de l'affectation
+      const affectations = await courrierService.getMesAffectations();
+      const affectation = affectations.find((a: any) => a.id === courrier.affectation_id);
+      
+      if (affectation) {
+        const mappedData: AffectationCourrier = {
+          id: affectation.courrier,
+          affectation_id: affectation.id,
+          numero: courrierComplet.numero_registre || '',
+          objet: courrierComplet.objet || '',
+          expediteur: courrierComplet.expediteur || "Service RH",
+          destinataire: courrierComplet.destinataire || '',
+          type: courrierComplet.type_courrier || 'entrant',
+          dateReception: courrierComplet.date_reception || courrierComplet.created_at?.split('T')[0] || '',
+          statut: 'signe',
+          urgent: courrierComplet.urgent || false,
+          commentaires: await chargerCommentaires(affectation.id),
+          pieceJointe: courrierComplet.fichier,
+          categorie: courrierComplet.categorie_name,
+          description: '',
+          note: affectation.note || '',
+          date_affectation: affectation.date_affectation,
+          affecte_par: affectation.affecte_par_nom_complet || affectation.affecte_par_username,
+        };
+        setCourrier(mappedData);
         
-        if (affectation) {
-          const courrierComplet = await courrierService.getCourrier(courrier.id);
-          if (courrierComplet.fichier) {
-            // Forcer le rechargement du PDF avec un timestamp pour éviter le cache
-            setPreviewUrl(`${courrierComplet.fichier}?t=${Date.now()}`);
-          }
-        
-          const mappedData: AffectationCourrier = {
-            id: affectation.courrier,
-            affectation_id: affectation.id,
-            numero: courrierComplet.numero_registre || '',
-            objet: courrierComplet.objet || '',
-            expediteur: courrierComplet.expediteur || "Service RH",
-            destinataire: courrierComplet.destinataire || '',
-            type: courrierComplet.type_courrier || 'entrant',
-            dateReception: courrierComplet.date_reception || courrierComplet.created_at?.split('T')[0] || '',
-            statut: affectation.statut === 'en_attente' ? 'en_attente' : 
-                    affectation.statut === 'lu' ? 'en_attente' :
-                    affectation.statut === 'valide' ? 'valide' :
-                    affectation.statut === 'rejete' ? 'rejete' : 'signe',
-            urgent: courrierComplet.urgent || false,
-            commentaires: [],
-            pieceJointe: courrierComplet.fichier,
-            categorie: courrierComplet.categorie_name,
-            description: '',
-            note: affectation.note || '',
-            date_affectation: affectation.date_affectation,
-            affecte_par: affectation.affecte_par_nom_complet || affectation.affecte_par_username,
-          };
-          setCourrier(mappedData);
+        // Forcer le rechargement du PDF avec un timestamp unique pour éviter le cache
+        if (courrierComplet.fichier) {
+          const timestamp = Date.now();
+          const newUrl = `${courrierComplet.fichier}?t=${timestamp}`;
+          setPreviewUrl(newUrl);
+          console.log("📄 Rechargement du PDF signé:", newUrl);
         }
-      }, 1000);
+      }
     } catch (error) {
       console.error("Erreur lors de la signature:", error);
       toast.error("Erreur lors de la signature du document");
@@ -532,6 +537,15 @@ export default function TraiterCourrier() {
                   >
                     <FileSignature className="h-4 w-4 mr-2" />
                     Signer électroniquement
+                  </Button>
+                  <Separator className="my-2" />
+                  <Button
+                    className="w-full border-amber-300 text-amber-700 hover:bg-amber-50"
+                    variant="outline"
+                    onClick={() => setReaffecterDialogOpen(true)}
+                  >
+                    <Share2 className="h-4 w-4 mr-2" />
+                    Réaffecter ce courrier
                   </Button>
                 </CardContent>
               </Card>
@@ -803,6 +817,25 @@ export default function TraiterCourrier() {
         userName={user?.username}
         onSign={handleSign}
       />
+
+      {/* Dialog Réaffectation */}
+      {courrier && (
+        <AffecterServiceDialog
+          open={reaffecterDialogOpen}
+          onOpenChange={setReaffecterDialogOpen}
+          courrier={{
+            id: courrier.id,
+            numero_registre: courrier.numero,
+            objet: courrier.objet,
+          } as any}
+          mode="reaffecter"
+          affectationId={courrier.affectation_id}
+          onSuccess={() => {
+            toast.success('Courrier réaffecté avec succès');
+            navigate('/mes-courriers');
+          }}
+        />
+      )}
     </div>
   );
 }

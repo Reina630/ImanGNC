@@ -253,48 +253,77 @@ export function EditCourrierDialog({
             <Mail className="h-5 w-5 text-primary" />
             Modifier le courrier
           </DialogTitle>
-          <DialogDescription>
-            Numéro de registre : {courrier.numero_registre}
-          </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Type de courrier */}
-          <div className="space-y-2">
-            <Label htmlFor="type_courrier" className="required">
-              Type de courrier
-            </Label>
-            <Select
-              value={formData.type_courrier}
-              onValueChange={(value) =>
-                setFormData({ ...formData, type_courrier: value as "entrant" | "sortant" | "interne" })
-              }
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="entrant">
-                  <div className="flex items-center gap-2">
-                    <Inbox className="h-4 w-4" />
-                    Courrier Entrant
-                  </div>
-                </SelectItem>
-                <SelectItem value="sortant">
-                  <div className="flex items-center gap-2">
-                    <Send className="h-4 w-4" />
-                    Courrier Sortant
-                  </div>
-                </SelectItem>
-                <SelectItem value="interne">
-                  <div className="flex items-center gap-2">
-                    <Mail className="h-4 w-4" />
-                    Courrier Interne
-                  </div>
-                </SelectItem>
-              </SelectContent>
-            </Select>
+          {/* Type de courrier et Numéro d'ordre */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="type_courrier" className="required">
+                Type de courrier
+              </Label>
+              <Select
+                value={formData.type_courrier}
+                onValueChange={(value) =>
+                  setFormData({ ...formData, type_courrier: value as "entrant" | "sortant" | "interne" })
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="entrant">
+                    <div className="flex items-center gap-2">
+                      <Inbox className="h-4 w-4" />
+                      Courrier Entrant
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="sortant">
+                    <div className="flex items-center gap-2">
+                      <Send className="h-4 w-4" />
+                      Courrier Sortant
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="interne">
+                    <div className="flex items-center gap-2">
+                      <Mail className="h-4 w-4" />
+                      Courrier Interne
+                    </div>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="numero_ordre">
+                Numéro d'ordre
+              </Label>
+              <Input
+                id="numero_ordre"
+                value={courrier.numero_registre}
+                disabled
+                className="bg-muted text-muted-foreground font-medium"
+              />
+            </div>
           </div>
+
+          {/* Référence (uniquement pour courrier sortant) */}
+          {formData.type_courrier === "sortant" && (
+            <div className="space-y-2">
+              <Label htmlFor="reference">
+                Référence (optionnel)
+              </Label>
+              <Input
+                id="reference"
+                placeholder="Ex: Réf. courrier entrant N°2026-045"
+                value={formData.reference}
+                onChange={(e) => setFormData({ ...formData, reference: e.target.value })}
+              />
+              <p className="text-xs text-muted-foreground">
+                Pour référencer un courrier entrant auquel vous répondez
+              </p>
+            </div>
+          )}
 
           {/* Date (conditionnelle selon le type) */}
           <div className="space-y-2">
@@ -370,17 +399,6 @@ export function EditCourrierDialog({
             {errors.objet && (
               <p className="text-sm text-red-500">{errors.objet}</p>
             )}
-          </div>
-
-          {/* Référence */}
-          <div className="space-y-2">
-            <Label htmlFor="reference">Référence (optionnel)</Label>
-            <Input
-              id="reference"
-              placeholder="Ex: N°123/RH/2026"
-              value={formData.reference}
-              onChange={(e) => setFormData({ ...formData, reference: e.target.value })}
-            />
           </div>
 
           {/* Catégorie */}

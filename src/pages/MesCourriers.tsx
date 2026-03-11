@@ -70,6 +70,7 @@ interface AffectationCourrier {
   statut_affectation?: string;
   urgent: boolean;
   commentaires: Commentaire[];
+  nb_commentaires?: number;
   pieceJointe?: string;
   fichier?: string;
   note?: string;
@@ -116,6 +117,7 @@ export default function MesCourriers() {
                     item.statut === 'rejete' ? 'rejete' : 'signe',
             urgent: item.courrier_details?.urgent || false,
             commentaires: [],
+            nb_commentaires: item.nb_commentaires || 0,
             pieceJointe: item.courrier_details?.fichier_url || item.courrier_details?.fichier,
             note: item.note || '',
             date_affectation: item.date_affectation,
@@ -352,12 +354,20 @@ export default function MesCourriers() {
                 courriersFiltres.map((courrier) => (
                   <TableRow key={courrier.id} className={courrier.urgent ? "border-l-2 border-l-amber-400" : ""}>
                     <TableCell className="font-medium">
-                      {courrier.numero}
-                      {courrier.urgent && (
-                        <Badge variant="outline" className="ml-2 text-xs border-amber-300 text-amber-700 bg-amber-50">
-                          Urgent
-                        </Badge>
-                      )}
+                      <div className="flex items-center gap-2">
+                        {courrier.numero}
+                        {courrier.urgent && (
+                          <Badge variant="outline" className="text-xs border-amber-300 text-amber-700 bg-amber-50">
+                            Urgent
+                          </Badge>
+                        )}
+                        {(courrier.nb_commentaires && courrier.nb_commentaires > 0) && (
+                          <Badge variant="outline" className="text-xs border-blue-300 text-blue-700 bg-blue-50 flex items-center gap-1">
+                            <MessageSquare className="h-3 w-3" />
+                            {courrier.nb_commentaires}
+                          </Badge>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell>{courrier.objet}</TableCell>
                     <TableCell>

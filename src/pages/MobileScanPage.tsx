@@ -4,7 +4,7 @@
  */
 
 import { useState, useEffect, useRef } from "react";
-import { Camera, List, LogOut, RefreshCw, Mail, Calendar, Building2, ArrowLeft, Check, X, Loader2 } from "lucide-react";
+import { Camera, List, LogOut, RefreshCw, Mail, Calendar, Building2, ArrowLeft, Check, X, Loader2, Crop } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -25,15 +25,22 @@ export default function MobileScanPage() {
   const { logout, user } = useAuth();
   
   const [view, setView] = useState<"scan" | "list">("scan");
-  const [scanStep, setScanStep] = useState<"camera" | "form">("camera");
+  const [scanStep, setScanStep] = useState<"camera" | "processing" | "edit" | "result" | "form">("camera");
   
   // États caméra et scan
   const [stream, setStream] = useState<MediaStream | null>(null);
+  const [capturedImage, setCapturedImage] = useState<string>("");
   const [scannedImage, setScannedImage] = useState<string>("");
-  const [scannedFile, setScannedFile] = useState<File | null>(null);
+  const [originalFile, setOriginalFile] = useState<File | null>(null);
+  const [corners, setCorners] = useState<number[][]>([]);
+  const [imageSize, setImageSize] = useState({ width: 0, height: 0 });
+  const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
+  const [displaySize, setDisplaySize] = useState({ width: 0, height: 0 });
   const [processing, setProcessing] = useState(false);
+  
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const editImageRef = useRef<HTMLImageElement>(null);
   
   // États formulaire
   const [formData, setFormData] = useState({
@@ -71,6 +78,29 @@ export default function MobileScanPage() {
       loadCourriers();
     }
   }, [view]);
+
+  // Mettre à jour les dimensions de l'image en mode édition
+  useEffect(() => {
+    if (scanStep === 'edit' && editImageRef.current) {
+      const updateSize = () => {
+        if (editImageRef.current) {
+          setDisplaySize({
+            width: editImageRef.current.clientWidth,
+            height: editImageRef.current.clientHeight
+          });
+        }
+      };
+      
+      if (editImageRef.current.complete) {
+        updateSize();
+      } else {
+        editImageRef.current.onload = updateSize;
+      }
+      
+      window.addEventListener('resize', updateSize);
+      return () => window.removeEventListener('resize', updateSize);
+    }
+  }, [scanStep, capturedImage]);
 
   const loadCategories = async () => {
     try {
@@ -129,22 +159,30 @@ export default function MobileScanPage() {
       if (!blob) return;
       
       const file = new File([blob], `scan_${Date.now()}.jpg`, { type: 'image/jpeg' });
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.95);
+      
+      setOriginalFile(file);
+      setCapturedImage(dataUrl);
       
       stopCamera();
+      setScanStep("processing");
       setProcessing(true);
 
       try {
-        // Détecter et scanner le document
+        // Détecter les coins automatiquement
         const detectResult = await scanService.detectCorners(file);
+        setCorners(detectResult.corners);
+        setImageSize({ width: detectResult.width, height: detectResult.height });
+        
+        // Scanner automatiquement avec les coins détectés
         const warpResult = await scanService.warpDocument(file, detectResult.corners);
         
         setScannedImage(warpResult.image);
-        setScannedFile(file);
-        setScanStep("form");
+        setScanStep("result");
         
         toast({
           title: "Document scanné",
-          description: "Remplissez les informations ci-dessous",
+          description: "Vérifiez le résultat ou recadrez si nécessaire",
         });
       } catch (error: any) {
         console.error('Erreur scan:', error);
@@ -153,6 +191,7 @@ export default function MobileScanPage() {
           title: 'Erreur de scan',
           description: 'Impossible de scanner le document. Réessayez.',
         });
+        setScanStep("camera");
         startCamera();
       } finally {
         setProcessing(false);
@@ -160,9 +199,92 @@ export default function MobileScanPage() {
     }, 'image/jpeg', 0.95);
   };
 
+  // Passer en mode édition manuelle des coins
+  const editCorners = () => {
+    setScanStep("edit");
+    setDisplaySize({ width: 0, height: 0 });
+  };
+
+  // Re-scanner avec les coins ajustés manuellement
+  const rescanWithEditedCorners = async () => {
+    if (!originalFile) return;
+
+    setProcessing(true);
+    setScanStep("processing");
+
+    try {
+      const warpResult = await scanService.warpDocument(originalFile, corners);
+      setScannedImage(warpResult.image);
+      setScanStep("result");
+      toast({
+        title: 'Scan mis à jour',
+        description: 'Le document a été re-scanné avec vos ajustements',
+      });
+    } catch (error: any) {
+      console.error('Erreur scan:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Erreur de scan',
+        description: error.response?.data?.error || 'Impossible de scanner',
+      });
+      setScanStep("edit");
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  // Gestion du drag des poignées (touch-friendly pour mobile)
+  const handlePointerDown = (index: number) => (e: React.PointerEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDraggingIndex(index);
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+  };
+
+  const handlePointerMove = (e: React.PointerEvent) => {
+    if (draggingIndex === null || !editImageRef.current) return;
+
+    const imgRect = editImageRef.current.getBoundingClientRect();
+    
+    let x = e.clientX - imgRect.left;
+    let y = e.clientY - imgRect.top;
+
+    x = Math.max(0, Math.min(x, imgRect.width));
+    y = Math.max(0, Math.min(y, imgRect.height));
+
+    const scaleX = imageSize.width / imgRect.width;
+    const scaleY = imageSize.height / imgRect.height;
+
+    const newCorners = [...corners];
+    newCorners[draggingIndex] = [x * scaleX, y * scaleY];
+    setCorners(newCorners);
+  };
+
+  const handlePointerUp = (e: React.PointerEvent) => {
+    if (draggingIndex !== null) {
+      (e.target as HTMLElement).releasePointerCapture(e.pointerId);
+    }
+    setDraggingIndex(null);
+  };
+
+  const retakeScan = () => {
+    setScannedImage("");
+    setCapturedImage("");
+    setOriginalFile(null);
+    setCorners([]);
+    setScanStep("camera");
+    startCamera();
+  };
+
+  const proceedToForm = () => {
+    setScanStep("form");
+  };
+
   const cancelScan = () => {
     setScannedImage("");
-    setScannedFile(null);
+    setCapturedImage("");
+    setOriginalFile(null);
+    setCorners([]);
     setScanStep("camera");
     setFormData({
       type_courrier: "entrant",
@@ -178,7 +300,7 @@ export default function MobileScanPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!formData.objet.trim() || !formData.nom.trim() || !scannedFile) {
+    if (!formData.objet.trim() || !formData.nom.trim() || !scannedImage) {
       toast({
         variant: "destructive",
         title: "Champs manquants",
@@ -190,10 +312,15 @@ export default function MobileScanPage() {
     try {
       setSubmitting(true);
 
+      // Convertir l'image base64 en File
+      const response = await fetch(scannedImage);
+      const blob = await response.blob();
+      const file = new File([blob], `scan_${Date.now()}.jpg`, { type: 'image/jpeg' });
+
       const data = new FormData();
       data.append("type_courrier", formData.type_courrier);
       data.append("objet", formData.objet);
-      data.append("fichier", scannedFile);
+      data.append("fichier", file);
       
       if (formData.type_courrier === "entrant") {
         data.append("expediteur", formData.nom);
@@ -277,7 +404,7 @@ export default function MobileScanPage() {
         </div>
       </div>
 
-      {/* Navigation Tabs - Cachés quand on est en mode formulaire */}
+      {/* Navigation Tabs - Cachés quand on est en mode scan (sauf camera) */}
       {scanStep === "camera" && (
         <div className="flex bg-background border-b sticky top-[73px] z-10">
           <button
@@ -351,6 +478,226 @@ export default function MobileScanPage() {
                     <Camera className="h-8 w-8 text-primary" />
                   </Button>
                 )}
+              </div>
+            </div>
+          </motion.div>
+        )}
+
+        {/* Vue Processing */}
+        {view === "scan" && scanStep === "processing" && (
+          <motion.div
+            key="processing"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="flex flex-col items-center justify-center py-20 min-h-[calc(100vh-137px)]"
+          >
+            <Loader2 className="h-16 w-16 animate-spin text-primary mb-6" />
+            <div className="text-center px-4">
+              <p className="font-medium text-xl mb-2">Traitement en cours...</p>
+              <p className="text-sm text-muted-foreground">
+                Détection et amélioration du document
+              </p>
+            </div>
+          </motion.div>
+        )}
+
+        {/* Vue Édition des coins */}
+        {view === "scan" && scanStep === "edit" && (
+          <motion.div
+            key="edit"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="p-4 space-y-4 pb-8 min-h-[calc(100vh-73px)]"
+          >
+            <div className="flex items-center gap-3 mb-2">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={retakeScan}
+              >
+                <ArrowLeft className="h-5 w-5" />
+              </Button>
+              <h2 className="text-lg font-semibold">Ajuster le recadrage</h2>
+            </div>
+
+            <div className="bg-muted/30 rounded-xl p-3 mb-4">
+              <p className="text-sm text-muted-foreground text-center">
+                Déplacez les poignées pour ajuster les coins du document
+              </p>
+            </div>
+
+            {(!capturedImage || corners.length !== 4) ? (
+              <div className="text-center py-12">
+                <p className="text-muted-foreground mb-4">
+                  Erreur : Données manquantes
+                </p>
+                <Button onClick={retakeScan}>
+                  Reprendre
+                </Button>
+              </div>
+            ) : (
+              <>
+                <div 
+                  className="relative bg-muted rounded-xl overflow-hidden"
+                  style={{ touchAction: 'none', userSelect: 'none' }}
+                >
+                  <img
+                    ref={editImageRef}
+                    src={capturedImage}
+                    alt="Photo capturée"
+                    className="w-full h-auto max-h-[65vh] object-contain mx-auto block"
+                    draggable={false}
+                    onLoad={() => {
+                      if (editImageRef.current) {
+                        setDisplaySize({
+                          width: editImageRef.current.clientWidth,
+                          height: editImageRef.current.clientHeight
+                        });
+                      }
+                    }}
+                  />
+                  
+                  <div 
+                    className="absolute inset-0"
+                    onPointerMove={handlePointerMove}
+                    onPointerUp={handlePointerUp}
+                    style={{ touchAction: 'none' }}
+                  >
+                    {/* SVG Overlay */}
+                    {displaySize.width > 0 && (
+                      <svg 
+                        className="absolute inset-0 w-full h-full pointer-events-none"
+                        style={{ 
+                          position: 'absolute',
+                          top: 0,
+                          left: 0,
+                          width: '100%',
+                          height: '100%'
+                        }}
+                      >
+                        <polygon
+                          points={corners.map(pt => {
+                            const x = (pt[0] / imageSize.width) * displaySize.width;
+                            const y = (pt[1] / imageSize.height) * displaySize.height;
+                            return `${x},${y}`;
+                          }).join(' ')}
+                          fill="rgba(16, 185, 129, 0.3)"
+                          stroke="#10b981"
+                          strokeWidth="3"
+                        />
+                      </svg>
+                    )}
+
+                    {/* Poignées draggables plus grandes pour mobile */}
+                    {displaySize.width > 0 && corners.map((pt, i) => {
+                      const x = (pt[0] / imageSize.width) * displaySize.width;
+                      const y = (pt[1] / imageSize.height) * displaySize.height;
+                      
+                      return (
+                        <div
+                          key={i}
+                          onPointerDown={handlePointerDown(i)}
+                          className="absolute w-12 h-12 bg-white border-4 border-emerald-500 rounded-full cursor-move shadow-xl hover:scale-110 active:scale-125 transition-transform"
+                          style={{
+                            left: `${x}px`,
+                            top: `${y}px`,
+                            transform: 'translate(-50%, -50%)',
+                            zIndex: 50,
+                            touchAction: 'none',
+                            pointerEvents: 'auto'
+                          }}
+                        />
+                      );
+                    })}
+                  </div>
+                </div>
+                
+                <div className="flex gap-3 justify-center pt-4">
+                  <Button
+                    size="lg"
+                    variant="outline"
+                    onClick={retakeScan}
+                    className="flex-1"
+                  >
+                    <RefreshCw className="h-5 w-5 mr-2" />
+                    Reprendre
+                  </Button>
+                  
+                  <Button
+                    size="lg"
+                    onClick={rescanWithEditedCorners}
+                    disabled={processing}
+                    className="flex-1"
+                  >
+                    <Check className="h-5 w-5 mr-2" />
+                    Valider
+                  </Button>
+                </div>
+              </>
+            )}
+          </motion.div>
+        )}
+
+        {/* Vue Résultat du scan */}
+        {view === "scan" && scanStep === "result" && (
+          <motion.div
+            key="result"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="p-4 space-y-4 pb-8 min-h-[calc(100vh-73px)]"
+          >
+            <div className="flex items-center gap-3 mb-2">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={retakeScan}
+              >
+                <ArrowLeft className="h-5 w-5" />
+              </Button>
+              <h2 className="text-lg font-semibold">Document scanné</h2>
+            </div>
+
+            <div className="rounded-xl overflow-hidden border bg-muted">
+              <img
+                src={scannedImage}
+                alt="Document scanné"
+                className="w-full h-auto max-h-[65vh] object-contain mx-auto"
+              />
+            </div>
+            
+            <div className="flex flex-col gap-3 pt-4">
+              <Button
+                size="lg"
+                onClick={proceedToForm}
+                className="w-full"
+              >
+                <Check className="h-5 w-5 mr-2" />
+                Continuer l'enregistrement
+              </Button>
+              
+              <div className="flex gap-3">
+                <Button
+                  size="lg"
+                  variant="outline"
+                  onClick={retakeScan}
+                  className="flex-1"
+                >
+                  <RefreshCw className="h-5 w-5 mr-2" />
+                  Reprendre
+                </Button>
+                
+                <Button
+                  size="lg"
+                  variant="outline"
+                  onClick={editCorners}
+                  className="flex-1"
+                >
+                  <Crop className="h-5 w-5 mr-2" />
+                  Recadrer
+                </Button>
               </div>
             </div>
           </motion.div>

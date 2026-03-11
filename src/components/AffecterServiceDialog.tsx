@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   Dialog,
   DialogContent,
@@ -24,9 +25,18 @@ interface AffecterServiceDialogProps {
   onOpenChange: (open: boolean) => void;
   courrier: Courrier | null;
   onSuccess?: () => void;
+  mode?: 'affecter' | 'reaffecter';  // Mode: affecter initial ou réaffecter
+  affectationId?: number;  // ID de l'affectation si mode réaffecter
 }
 
-export function AffecterServiceDialog({ open, onOpenChange, courrier, onSuccess }: AffecterServiceDialogProps) {
+export function AffecterServiceDialog({ 
+  open, 
+  onOpenChange, 
+  courrier, 
+  onSuccess,
+  mode = 'affecter',
+  affectationId
+}: AffecterServiceDialogProps) {
   const { toast } = useToast();
   const [modeAffectation, setModeAffectation] = useState<"email" | "plateforme">("plateforme");
   const [serviceId, setServiceId] = useState<string>("");
@@ -34,6 +44,7 @@ export function AffecterServiceDialog({ open, onOpenChange, courrier, onSuccess 
   const [services, setServices] = useState<Service[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadingServices, setLoadingServices] = useState(false);
+  const [showSuccess, setShowSuccess] = useState(false);
   
   // Message pré-rempli simple (les détails du courrier sont ajoutés automatiquement par le système)
   const defaultMessage = courrier ? `Bonjour,
@@ -107,74 +118,42 @@ Cordialement.` : "";
       return;
     }
 
-    // Validation selon le mode
-    if (modeAffectation === "email") {
-      if (!serviceId || !email) {
-        toast({ 
-          variant: "destructive", 
-          title: "Erreur", 
-          description: "Veuillez remplir tous les champs obligatoires." 
-        });
-        return;
-      }
-      
-      // Validation de l'email
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(email)) {
-        toast({ 
-          variant: "destructive", 
-          title: "Erreur", 
-          description: "Veuillez saisir une adresse email valide." 
-        });
-        return;
-      }
-    } else {
-      // Mode plateforme
-      if (!serviceId) {
-        toast({ 
-          variant: "destructive", 
-          title: "Erreur", 
-          description: "Veuillez sélectionner un service." 
-        });
-        return;
-      }
+    // Validation du service
+    if (!serviceId) {
+      return;
     }
-    
+
     setLoading(true);
     try {
-      if (modeAffectation === "email") {
-        // Trouver le service sélectionné et convertir son nom en code
-        const selectedService = services.find(s => s.id.toString() === serviceId);
-        const serviceCode = selectedService ? getServiceCode(selectedService.nom) : 'autre';
-        
-        // Affectation par email
-        await courrierService.affecterServiceParEmail(courrier.id, serviceCode, email, message);
-        toast({ 
-          title: "Affectation réussie", 
-          description: `Le courrier a été affecté au service et un email a été envoyé à ${email}.` 
+      if (mode === 'reaffecter') {
+        // Mode réaffectation : appeler l'endpoint de réaffectation
+        if (!affectationId) {
+          throw new Error("ID d'affectation manquant");
+        }
+        await courrierService.reaffecterCourrier(affectationId, {
+          service_id: parseInt(serviceId),
+          mode: modeAffectation
         });
       } else {
-        // Affectation via la plateforme (nouveau)
-        const result = await courrierService.affecterServicePlateforme(courrier.id, parseInt(serviceId));
-        const service = services.find(s => s.id === parseInt(serviceId));
-        toast({ 
-          title: "Affectation réussie", 
-          description: `Le courrier a été affecté à ${result.nombre_affectations} utilisateur(s) du service ${service?.nom} via la plateforme.` 
-        });
+        // Mode affectation normale
+        await courrierService.affecterServicePlateforme(courrier.id, parseInt(serviceId));
       }
       
-      onOpenChange(false);
-      setServiceCode("");
-      setEmail("");
-      setServiceId("");
-      setMessage(defaultMessage);
-      onSuccess && onSuccess();
+      setShowSuccess(true);
+      setTimeout(() => {
+        setShowSuccess(false);
+        onOpenChange(false);
+        setServiceId("");
+        setEmail("");
+        setMessage(defaultMessage);
+        onSuccess && onSuccess();
+      }, 1800);
     } catch (error: any) {
       console.error("Erreur lors de l'affectation:", error);
       toast({ 
         variant: "destructive", 
         title: "Erreur", 
-        description: error.response?.data?.error || "Impossible d'affecter le courrier." 
+        description: error.response?.data?.error || `Impossible d'${mode === 'reaffecter' ? 'réaffecter' : 'affecter'} le courrier.`
       });
     } finally {
       setLoading(false);
@@ -183,11 +162,26 @@ Cordialement.` : "";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-2xl">
+        <AnimatePresence>
+          {showSuccess && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.8 }}
+              transition={{ duration: 0.4 }}
+              className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-white/90 rounded-lg shadow-lg"
+            >
+              <svg className="mx-auto mb-4" width="64" height="64" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" fill="#22c55e" opacity="0.15"/><path d="M7 13l3 3 7-7" stroke="#22c55e" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              <div className="text-2xl font-bold text-green-600 mb-2">{mode === 'reaffecter' ? 'Réaffectation réussie !' : 'Affectation réussie !'}</div>
+              <div className="text-muted-foreground text-center">Le courrier a été {mode === 'reaffecter' ? 'réaffecté' : 'affecté'} avec succès au service sélectionné.</div>
+            </motion.div>
+          )}
+        </AnimatePresence>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Mail className="h-5 w-5" />
-            Affecter à un service
+            {mode === 'reaffecter' ? 'Réaffecter à un service' : 'Affecter à un service'}
           </DialogTitle>
           <DialogDescription>
             Choisissez le mode d'affectation : par email ou via la plateforme.
@@ -217,7 +211,7 @@ Cordialement.` : "";
                     <Mail className="h-4 w-4 text-primary" />
                     <div>
                       <p className="font-medium">Par email</p>
-                      <p className="text-xs text-muted-foreground">Envoyer le courrier par email avec le document en pièce jointe</p>
+                      <p className="text-xs text-muted-foreground">Tous les utilisateurs du service recevront un email avec le document en pièce jointe</p>
                     </div>
                   </div>
                 </Label>
@@ -274,45 +268,16 @@ Cordialement.` : "";
                         <div className="flex items-center gap-2">
                           <Building2 className="h-4 w-4 text-muted-foreground" />
                           <span>{service.nom}</span>
+                          <span className="text-xs text-muted-foreground">
+                            ({service.nombre_utilisateurs || 0} utilisateur{(service.nombre_utilisateurs || 0) > 1 ? 's' : ''})
+                          </span>
                         </div>
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="email" className="font-medium">
-                  Email du destinataire <span className="text-red-500">*</span>
-                </Label>
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="exemple@entreprise.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  disabled={loading}
-                />
                 <p className="text-xs text-muted-foreground">
-                  L'email recevra le document en pièce jointe avec toutes les informations du courrier.
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="message-email" className="font-medium">
-                  Message
-                </Label>
-                <Textarea
-                  id="message-email"
-                  placeholder="Message à envoyer..."
-                  value={message}
-                  onChange={(e) => setMessage(e.target.value)}
-                  rows={8}
-                  disabled={loading}
-                  className="font-mono text-sm"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Les informations du courrier (numéro, type, objet, dates, etc.) seront automatiquement ajoutées dans l'email.
+                  Un email sera envoyé automatiquement à tous les utilisateurs du service avec le document en pièce jointe.
                 </p>
               </div>
             </>
@@ -324,21 +289,23 @@ Cordialement.` : "";
           </Button>
           <Button 
             onClick={handleAffecter} 
-            disabled={
-              loading || 
-              (modeAffectation === "email" && (!serviceId || !email)) ||
-              (modeAffectation === "plateforme" && !serviceId)
-            }
+            disabled={loading || !serviceId}
           >
             {modeAffectation === "plateforme" ? (
               <>
                 <Bell className="h-4 w-4 mr-2" />
-                {loading ? "Affectation en cours..." : "Affecter via la plateforme"}
+                {loading 
+                  ? (mode === 'reaffecter' ? "Réaffectation en cours..." : "Affectation en cours...") 
+                  : (mode === 'reaffecter' ? "Réaffecter via la plateforme" : "Affecter via la plateforme")
+                }
               </>
             ) : (
               <>
                 <Send className="h-4 w-4 mr-2" />
-                {loading ? "Envoi en cours..." : "Affecter et envoyer"}
+                {loading 
+                  ? "Envoi en cours..." 
+                  : (mode === 'reaffecter' ? "Réaffecter et envoyer par email" : "Affecter et envoyer par email")
+                }
               </>
             )}
           </Button>

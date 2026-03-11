@@ -381,6 +381,19 @@ const courrierService = {
       commentaire: response.data
     };
   },
+
+  /**
+   * Réaffecter un courrier à un autre service
+   * @param affectationId - ID de l'affectation à transférer
+   * @param data - Données de réaffectation (service_id, mode)
+   */
+  reaffecterCourrier: async (
+    affectationId: number,
+    data: { service_id: number; mode?: string }
+  ): Promise<{ message: string; nb_affectations?: number; service?: string }> => {
+    const response = await api.post(`/affectations/${affectationId}/reaffecter/`, data);
+    return response.data;
+  },
 };
 
 export default courrierService;

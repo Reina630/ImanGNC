@@ -4,7 +4,7 @@
  */
 
 import { useState, useEffect } from "react";
-import { Upload, Calendar, Mail, Send, Inbox, FileText } from "lucide-react";
+import { Upload, Calendar, Mail, Send, Inbox, FileText, Building2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -26,6 +26,7 @@ import { useToast } from "@/hooks/use-toast";
 import courrierService from "@/services/courrierService";
 import categoryService from "@/services/categoryService";
 import type { Categorie } from "@/types";
+import { MODE_CHOICES, SERVICE_CHOICES } from "@/types";
 
 interface AddCourrierDialogProps {
   open: boolean;
@@ -45,10 +46,15 @@ export function AddCourrierDialog({
   
   // État du formulaire
   const [formData, setFormData] = useState({
-    type_courrier: "entrant" as "entrant" | "sortant",
+    type_courrier: "entrant" as "entrant" | "sortant" | "interne",
     date_reception: "",
+    mode_reception: "",
     date_envoi: "",
+    mode_envoi: "",
+    date_circulation: "",
     nom: "", // Expéditeur pour entrant, Destinataire pour sortant
+    service_emetteur: "", // Pour courrier interne
+    service_destinataire: "", // Pour courrier interne
     objet: "",
     reference: "",
     categorie: "",
@@ -78,8 +84,13 @@ export function AddCourrierDialog({
       setFormData({
         type_courrier: "entrant",
         date_reception: new Date().toISOString().split("T")[0], // Date du jour par défaut
+        mode_reception: "",
         date_envoi: "",
+        mode_envoi: "",
+        date_circulation: "",
         nom: "",
+        service_emetteur: "",
+        service_destinataire: "",
         objet: "",
         reference: "",
         categorie: "",
@@ -97,23 +108,39 @@ export function AddCourrierDialog({
     const newErrors: Record<string, string> = {};
 
     // Validation selon le type de courrier
-    if (formData.type_courrier === "entrant" && !formData.date_reception) {
-      newErrors.date_reception = "La date est obligatoire";
+    if (formData.type_courrier === "entrant") {
+      if (!formData.date_reception) {
+        newErrors.date_reception = "La date de réception est obligatoire";
+      }
+      if (!formData.nom.trim()) {
+        newErrors.nom = "L'expéditeur est obligatoire";
+      }
     }
     
-    if (formData.type_courrier === "sortant" && !formData.date_envoi) {
-      newErrors.date_envoi = "La date est obligatoire";
+    if (formData.type_courrier === "sortant") {
+      if (!formData.date_envoi) {
+        newErrors.date_envoi = "La date d'envoi est obligatoire";
+      }
+      if (!formData.nom.trim()) {
+        newErrors.nom = "Le destinataire est obligatoire";
+      }
+    }
+    
+    if (formData.type_courrier === "interne") {
+      if (!formData.date_circulation) {
+        newErrors.date_circulation = "La date de circulation est obligatoire";
+      }
+      if (!formData.service_emetteur) {
+        newErrors.service_emetteur = "Le service émetteur est obligatoire";
+      }
+      if (!formData.service_destinataire) {
+        newErrors.service_destinataire = "Le service destinataire est obligatoire";
+      }
     }
 
-    // Champs obligatoires
+    // Champs obligatoires pour tous les types
     if (!formData.objet.trim()) {
       newErrors.objet = "L'objet est obligatoire";
-    }
-    
-    if (!formData.nom.trim()) {
-      newErrors.nom = formData.type_courrier === "entrant" 
-        ? "L'expéditeur est obligatoire" 
-        : "Le destinataire est obligatoire";
     }
     
     if (!fichier) {
@@ -149,13 +176,24 @@ export function AddCourrierDialog({
       data.append("objet", formData.objet);
       data.append("fichier", fichier!);
       
-      // Définir expéditeur ou destinataire selon le type
+      // Ajouter les champs selon le type de courrier
       if (formData.type_courrier === "entrant") {
         data.append("expediteur", formData.nom);
         data.append("date_reception", formData.date_reception);
-      } else {
+        if (formData.mode_reception) {
+          data.append("mode_reception", formData.mode_reception);
+        }
+      } else if (formData.type_courrier === "sortant") {
         data.append("destinataire", formData.nom);
         data.append("date_envoi", formData.date_envoi);
+        if (formData.mode_envoi) {
+          data.append("mode_envoi", formData.mode_envoi);
+        }
+      } else {
+        // Courrier interne
+        data.append("date_circulation", formData.date_circulation);
+        data.append("service_emetteur", formData.service_emetteur);
+        data.append("service_destinataire", formData.service_destinataire);
       }
       
       // Référence optionnelle
@@ -233,7 +271,7 @@ export function AddCourrierDialog({
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Type de courrier et Référence */}
+          {/* Type de courrier et Numéro d'ordre */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="type_courrier" className="required">
@@ -244,8 +282,10 @@ export function AddCourrierDialog({
                 onValueChange={(value) =>
                   setFormData({ 
                     ...formData, 
-                    type_courrier: value as "entrant" | "sortant",
-                    nom: "", // Réinitialiser le nom quand on change le type
+                    type_courrier: value as "entrant" | "sortant" | "interne",
+                    nom: "",
+                    service_emetteur: "",
+                    service_destinataire: "",
                   })
                 }
               >
@@ -276,58 +316,223 @@ export function AddCourrierDialog({
             </div>
 
             <div className="space-y-2">
+              <Label htmlFor="numero_ordre">
+                Numéro d'ordre
+              </Label>
+              <Input
+                id="numero_ordre"
+                value="(Sera généré automatiquement)"
+                disabled
+                className="bg-muted text-muted-foreground"
+              />
+            </div>
+          </div>
+
+          {/* Référence (uniquement pour courrier sortant) */}
+          {formData.type_courrier === "sortant" && (
+            <div className="space-y-2">
               <Label htmlFor="reference">
                 Référence (optionnel)
               </Label>
               <Input
                 id="reference"
-                placeholder="Ex: N°123/RH/2026"
+                placeholder="Ex: Réf. courrier entrant N°2026-045"
                 value={formData.reference}
                 onChange={(e) => setFormData({ ...formData, reference: e.target.value })}
               />
+              <p className="text-xs text-muted-foreground">
+                Pour référencer un courrier entrant auquel vous répondez
+              </p>
             </div>
-          </div>
+          )}
 
-          {/* Date et Nom (Provenance/Destination) */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="date" className="required flex items-center gap-2">
-                <Calendar className="h-4 w-4" />
-                {formData.type_courrier === "entrant" ? "Date d'entrée" : "Date de sortie"}
-              </Label>
-              <Input
-                id="date"
-                type="date"
-                value={formData.type_courrier === "entrant" ? formData.date_reception : formData.date_envoi}
-                onChange={(e) =>
-                  setFormData({
-                    ...formData,
-                    [formData.type_courrier === "entrant" ? "date_reception" : "date_envoi"]: e.target.value,
-                  })
-                }
-                className={errors.date_reception || errors.date_envoi ? "border-red-500" : ""}
-              />
-              {(errors.date_reception || errors.date_envoi) && (
-                <p className="text-sm text-red-500">{errors.date_reception || errors.date_envoi}</p>
-              )}
-            </div>
+          {/* Date et Nom (Provenance/Destination) - COURRIER ENTRANT */}
+          {formData.type_courrier === "entrant" && (
+            <>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="date_reception" className="required flex items-center gap-2">
+                    <Calendar className="h-4 w-4" />
+                    Date de réception
+                  </Label>
+                  <Input
+                    id="date_reception"
+                    type="date"
+                    value={formData.date_reception}
+                    onChange={(e) => setFormData({ ...formData, date_reception: e.target.value })}
+                    className={errors.date_reception ? "border-red-500" : ""}
+                  />
+                  {errors.date_reception && (
+                    <p className="text-sm text-red-500">{errors.date_reception}</p>
+                  )}
+                </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="nom" className="required">
-                {formData.type_courrier === "entrant" ? "Provenance" : "Destination"}
-              </Label>
-              <Input
-                id="nom"
-                placeholder={formData.type_courrier === "entrant" ? "Nom de l'expéditeur" : "Nom du destinataire"}
-                value={formData.nom}
-                onChange={(e) => setFormData({ ...formData, nom: e.target.value })}
-                className={errors.nom ? "border-red-500" : ""}
-              />
-              {errors.nom && (
-                <p className="text-sm text-red-500">{errors.nom}</p>
-              )}
-            </div>
-          </div>
+                <div className="space-y-2">
+                  <Label htmlFor="mode_reception">Mode de réception</Label>
+                  <Select
+                    value={formData.mode_reception}
+                    onValueChange={(value) => setFormData({ ...formData, mode_reception: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Sélectionnez un mode" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {MODE_CHOICES.map((mode) => (
+                        <SelectItem key={mode.value} value={mode.value}>
+                          {mode.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="expediteur" className="required">Expéditeur</Label>
+                <Input
+                  id="expediteur"
+                  placeholder="Nom de l'expéditeur ou organisation"
+                  value={formData.nom}
+                  onChange={(e) => setFormData({ ...formData, nom: e.target.value })}
+                  className={errors.nom ? "border-red-500" : ""}
+                />
+                {errors.nom && (
+                  <p className="text-sm text-red-500">{errors.nom}</p>
+                )}
+              </div>
+            </>
+          )}
+
+          {/* Date et Nom - COURRIER SORTANT */}
+          {formData.type_courrier === "sortant" && (
+            <>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="date_envoi" className="required flex items-center gap-2">
+                    <Calendar className="h-4 w-4" />
+                    Date d'envoi
+                  </Label>
+                  <Input
+                    id="date_envoi"
+                    type="date"
+                    value={formData.date_envoi}
+                    onChange={(e) => setFormData({ ...formData, date_envoi: e.target.value })}
+                    className={errors.date_envoi ? "border-red-500" : ""}
+                  />
+                  {errors.date_envoi && (
+                    <p className="text-sm text-red-500">{errors.date_envoi}</p>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="mode_envoi">Mode d'envoi</Label>
+                  <Select
+                    value={formData.mode_envoi}
+                    onValueChange={(value) => setFormData({ ...formData, mode_envoi: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Sélectionnez un mode" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {MODE_CHOICES.map((mode) => (
+                        <SelectItem key={mode.value} value={mode.value}>
+                          {mode.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="destinataire" className="required">Destinataire</Label>
+                <Input
+                  id="destinataire"
+                  placeholder="Nom du destinataire ou organisation"
+                  value={formData.nom}
+                  onChange={(e) => setFormData({ ...formData, nom: e.target.value })}
+                  className={errors.nom ? "border-red-500" : ""}
+                />
+                {errors.nom && (
+                  <p className="text-sm text-red-500">{errors.nom}</p>
+                )}
+              </div>
+            </>
+          )}
+
+          {/* Date et Services - COURRIER INTERNE */}
+          {formData.type_courrier === "interne" && (
+            <>
+              <div className="space-y-2">
+                <Label htmlFor="date_circulation" className="required flex items-center gap-2">
+                  <Calendar className="h-4 w-4" />
+                  Date de circulation
+                </Label>
+                <Input
+                  id="date_circulation"
+                  type="date"
+                  value={formData.date_circulation}
+                  onChange={(e) => setFormData({ ...formData, date_circulation: e.target.value })}
+                  className={errors.date_circulation ? "border-red-500" : ""}
+                />
+                {errors.date_circulation && (
+                  <p className="text-sm text-red-500">{errors.date_circulation}</p>
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="service_emetteur" className="required flex items-center gap-2">
+                    <Building2 className="h-4 w-4" />
+                    Service émetteur
+                  </Label>
+                  <Select
+                    value={formData.service_emetteur}
+                    onValueChange={(value) => setFormData({ ...formData, service_emetteur: value })}
+                  >
+                    <SelectTrigger className={errors.service_emetteur ? "border-red-500" : ""}>
+                      <SelectValue placeholder="Sélectionnez un service" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {SERVICE_CHOICES.map((service) => (
+                        <SelectItem key={service.value} value={service.value}>
+                          {service.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {errors.service_emetteur && (
+                    <p className="text-sm text-red-500">{errors.service_emetteur}</p>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="service_destinataire" className="required flex items-center gap-2">
+                    <Building2 className="h-4 w-4" />
+                    Service destinataire
+                  </Label>
+                  <Select
+                    value={formData.service_destinataire}
+                    onValueChange={(value) => setFormData({ ...formData, service_destinataire: value })}
+                  >
+                    <SelectTrigger className={errors.service_destinataire ? "border-red-500" : ""}>
+                      <SelectValue placeholder="Sélectionnez un service" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {SERVICE_CHOICES.map((service) => (
+                        <SelectItem key={service.value} value={service.value}>
+                          {service.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {errors.service_destinataire && (
+                    <p className="text-sm text-red-500">{errors.service_destinataire}</p>
+                  )}
+                </div>
+              </div>
+            </>
+          )}
 
           {/* Objet */}
           <div className="space-y-2">

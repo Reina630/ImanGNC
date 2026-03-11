@@ -218,9 +218,9 @@ const NouveauCourrier = () => {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label>Référence</Label>
+                <Label>Numéro d'ordre</Label>
                 <div className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-md text-sm text-muted-foreground">
-                  Sera générée automatiquement lors de l'enregistrement
+                  (Sera généré automatiquement)
                 </div>
               </div>
 
@@ -336,13 +336,16 @@ const NouveauCourrier = () => {
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="reponseA">En réponse au courrier</Label>
+                    <Label htmlFor="reponseA">Référence (optionnel)</Label>
                     <Input
                       id="reponseA"
-                      placeholder="Ex: CE-2026-045 (optionnel)"
+                      placeholder="Ex: Réf. courrier entrant N°2026-045"
                       value={formData.reponse_a}
                       onChange={(e) => handleInputChange('reponse_a', e.target.value)}
                     />
+                    <p className="text-xs text-muted-foreground">
+                      Pour référencer un courrier entrant auquel vous répondez
+                    </p>
                   </div>
                 </div>
               )}
