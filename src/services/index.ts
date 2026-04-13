@@ -9,6 +9,8 @@ export { default as userService } from './userService';
 export { default as tagService } from './tagService';
 export { default as shareService } from './shareService';
 export { default as categoryService } from './categoryService';
+export { default as courrierService } from './courrierService';
+export { default as circuitAffectationService } from './circuitAffectationService';
 
 // Export des types
 export type { DocumentFilters, PaginatedResponse } from './documentService';

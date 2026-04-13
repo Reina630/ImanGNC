@@ -24,7 +24,7 @@ export function useCreateUser() {
       username: string;
       email: string;
       password: string;
-      role: 'admin' | 'collaborator' | 'client';
+      role: 'admin' | 'collaborator' | 'client' | 'rh' | 'dg';
     }) => userService.createUser(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['users'] });

@@ -1,10 +1,11 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Dialog,
   DialogContent,
@@ -15,25 +16,18 @@ import {
 } from "@/components/ui/dialog";
 import {
   CheckCircle2,
-  XCircle,
   FileSignature,
-  MessageSquare,
   ArrowLeft,
-  Calendar,
-  User,
-  Mail,
   FileText,
-  Clock,
   Zap,
-  Download,
-  Share2,
   Loader2,
+  Forward,
+  Reply,
 } from "lucide-react";
 import { toast } from "sonner";
 import courrierService from "@/services/courrierService";
 import api from "@/services/api";
 import { SignatureDialog } from "@/components/SignatureDialog";
-import { AffecterServiceDialog } from "@/components/AffecterServiceDialog";
 import { useAuth } from "@/contexts/AuthContext";
 
 // Types
@@ -55,7 +49,7 @@ interface AffectationCourrier {
   objet: string;
   expediteur: string;
   destinataire?: string;
-  type: "entrant" | "sortant";
+  type: "entrant" | "sortant" | "interne";
   type_courrier?: string;
   dateReception: string;
   date_reception?: string;
@@ -72,6 +66,8 @@ interface AffectationCourrier {
   note?: string;
   date_affectation?: string;
   affecte_par?: string;
+  action_requise?: string;
+  niveau_urgence?: string;
 }
 
 export default function TraiterCourrier() {
@@ -89,6 +85,8 @@ export default function TraiterCourrier() {
   const [previewUrl, setPreviewUrl] = useState<string>("");
   const [signatureDialogOpen, setSignatureDialogOpen] = useState(false);
   const [reaffecterDialogOpen, setReaffecterDialogOpen] = useState(false);
+  const [renvoyerDialogOpen, setRenvoyerDialogOpen] = useState(false);
+  const [commentaireRenvoi, setCommentaireRenvoi] = useState("");
 
   // Charger le courrier depuis l'API
   useEffect(() => {
@@ -140,6 +138,8 @@ export default function TraiterCourrier() {
             note: affectation.note || '',
             date_affectation: affectation.date_affectation,
             affecte_par: affectation.affecte_par_nom_complet || affectation.affecte_par_username,
+            action_requise: affectation.action_requise || 'informatif',
+            niveau_urgence: affectation.niveau_urgence || 'normal',
           };
           setCourrier(mappedData);
         } else {
@@ -201,6 +201,23 @@ export default function TraiterCourrier() {
     }
   };
 
+  const handleRenvoyer = async () => {
+    if (!courrier) return;
+
+    try {
+      await courrierService.renvoyerAffectation(courrier.affectation_id, commentaireRenvoi);
+      toast.success("Courrier renvoyé avec succès");
+      setRenvoyerDialogOpen(false);
+      setCommentaireRenvoi("");
+      
+      // Retour à la liste des courriers
+      navigate("/mes-courriers");
+    } catch (error) {
+      console.error("Erreur lors du renvoi:", error);
+      toast.error("Erreur lors du renvoi du courrier");
+    }
+  };
+
   const handleAction = async () => {
     if (!courrier || !actionType) return;
 
@@ -240,6 +257,14 @@ export default function TraiterCourrier() {
           affecte_par: affectation.affecte_par_nom_complet || affectation.affecte_par_username,
         };
         setCourrier(mappedData);
+        
+        // Forcer le rechargement du PDF avec un timestamp unique pour éviter le cache
+        if (courrierComplet.fichier) {
+          const timestamp = Date.now();
+          const newUrl = `${courrierComplet.fichier}?t=${timestamp}`;
+          setPreviewUrl(newUrl);
+          console.log("📄 Rechargement du PDF signé:", newUrl);
+        }
       }
 
       setMotifRejet("");
@@ -512,40 +537,60 @@ export default function TraiterCourrier() {
             {courrier.statut === "en_attente" && (
               <Card className="border-none shadow-sm bg-gradient-to-br from-slate-50 to-white">
                 <CardHeader className="border-b">
-                  <CardTitle className="text-base">Actions</CardTitle>
+                  <CardTitle className="text-base">Actions requises</CardTitle>
                 </CardHeader>
                 <CardContent className="pt-6 space-y-3">
-                  <Button
-                    className="w-full bg-emerald-600 hover:bg-emerald-700 text-white"
-                    onClick={() => openActionDialog("valider")}
-                  >
-                    <CheckCircle2 className="h-4 w-4 mr-2" />
-                    Valider le courrier
-                  </Button>
-                  <Button
-                    className="w-full border-rose-300 text-rose-700 hover:bg-rose-50"
-                    variant="outline"
-                    onClick={() => openActionDialog("rejeter")}
-                  >
-                    <XCircle className="h-4 w-4 mr-2" />
-                    Rejeter le courrier
-                  </Button>
-                  <Button
-                    className="w-full border-blue-300 text-blue-700 hover:bg-blue-50"
-                    variant="outline"
-                    onClick={() => openActionDialog("signer")}
-                  >
-                    <FileSignature className="h-4 w-4 mr-2" />
-                    Signer électroniquement
-                  </Button>
+                  {/* Bouton principal selon action_requise */}
+                  {courrier.action_requise === "a_repondre" && (
+                    <Button
+                      className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+                      onClick={() => navigate(`/courriers/repondre/${courrier.id}`)}
+                    >
+                      <Reply className="h-4 w-4 mr-2" />
+                      Répondre au courrier
+                    </Button>
+                  )}
+                  
+                  {courrier.action_requise === "a_signer" && (
+                    <Button
+                      className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+                      onClick={() => openActionDialog("signer")}
+                    >
+                      <FileSignature className="h-4 w-4 mr-2" />
+                      Signer le document
+                    </Button>
+                  )}
+                  
+                  {courrier.action_requise === "accusation_reception" && (
+                    <Button
+                      className="w-full bg-emerald-600 hover:bg-emerald-700 text-white"
+                      onClick={() => openActionDialog("valider")}
+                    >
+                      <CheckCircle2 className="h-4 w-4 mr-2" />
+                      Accuser réception
+                    </Button>
+                  )}
+                  
+                  {courrier.action_requise === "informatif" && (
+                    <Button
+                      className="w-full bg-emerald-600 hover:bg-emerald-700 text-white"
+                      onClick={() => openActionDialog("valider")}
+                    >
+                      <CheckCircle2 className="h-4 w-4 mr-2" />
+                      Marquer comme lu
+                    </Button>
+                  )}
+
+                  {/* Actions secondaires */}
                   <Separator className="my-2" />
+                  
                   <Button
-                    className="w-full border-amber-300 text-amber-700 hover:bg-amber-50"
+                    className="w-full border-purple-300 text-purple-700 hover:bg-purple-50"
                     variant="outline"
-                    onClick={() => setReaffecterDialogOpen(true)}
+                    onClick={() => setRenvoyerDialogOpen(true)}
                   >
-                    <Share2 className="h-4 w-4 mr-2" />
-                    Réaffecter ce courrier
+                    <Forward className="h-4 w-4 mr-2" />
+                    Renvoyer (ne me concerne pas)
                   </Button>
                 </CardContent>
               </Card>
@@ -567,6 +612,44 @@ export default function TraiterCourrier() {
                       </Badge>
                     </div>
                   </div>
+
+                  {courrier.action_requise && (
+                    <div className="flex items-start gap-3">
+                      <Zap className="h-4 w-4 text-muted-foreground mt-0.5" />
+                      <div className="flex-1">
+                        <p className="text-xs text-muted-foreground">Action requise</p>
+                        <Badge variant="outline" className={
+                          courrier.action_requise === "a_repondre" ? "border-blue-200 text-blue-700 bg-blue-50 mt-1" :
+                          courrier.action_requise === "a_signer" ? "border-purple-200 text-purple-700 bg-purple-50 mt-1" :
+                          courrier.action_requise === "accusation_reception" ? "border-green-200 text-green-700 bg-green-50 mt-1" :
+                          "border-slate-200 text-slate-700 bg-slate-50 mt-1"
+                        }>
+                          {courrier.action_requise === "a_repondre" ? "À répondre" :
+                           courrier.action_requise === "a_signer" ? "À signer" :
+                           courrier.action_requise === "accusation_reception" ? "Accuser réception" :
+                           "Informatif"}
+                        </Badge>
+                      </div>
+                    </div>
+                  )}
+
+                  {courrier.niveau_urgence && courrier.niveau_urgence !== "normal" && (
+                    <div className="flex items-start gap-3">
+                      <Clock className="h-4 w-4 text-muted-foreground mt-0.5" />
+                      <div className="flex-1">
+                        <p className="text-xs text-muted-foreground">Niveau d'urgence</p>
+                        <Badge variant="outline" className={
+                          courrier.niveau_urgence === "critique" ? "border-red-200 text-red-700 bg-red-50 mt-1" :
+                          courrier.niveau_urgence === "eleve" ? "border-orange-200 text-orange-700 bg-orange-50 mt-1" :
+                          "border-yellow-200 text-yellow-700 bg-yellow-50 mt-1"
+                        }>
+                          {courrier.niveau_urgence === "critique" ? "Critique" :
+                           courrier.niveau_urgence === "eleve" ? "Élevé" :
+                           "Faible"}
+                        </Badge>
+                      </div>
+                    </div>
+                  )}
 
                   <Separator />
 
@@ -803,6 +886,57 @@ export default function TraiterCourrier() {
               {actionType === "rejeter" && <XCircle className="h-4 w-4 mr-2" />}
               {actionType === "signer" && <FileSignature className="h-4 w-4 mr-2" />}
               Confirmer
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog Renvoyer */}
+      <Dialog open={renvoyerDialogOpen} onOpenChange={setRenvoyerDialogOpen}>
+        <DialogContent className="max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Renvoyer le courrier</DialogTitle>
+            <DialogDescription>
+              Courrier : {courrier.numero} - {courrier.objet}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="p-4 bg-purple-50 border border-purple-100 rounded-lg">
+              <p className="text-sm text-purple-800">
+                <Forward className="h-4 w-4 inline mr-2" />
+                Vous allez renvoyer ce courrier car il ne vous concerne pas. L'affectation sera annulée et le courrier retournera à l'expéditeur.
+              </p>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Commentaire (optionnel)</label>
+              <Textarea
+                placeholder="Précisez pourquoi ce courrier ne vous concerne pas..."
+                value={commentaireRenvoi}
+                onChange={(e) => setCommentaireRenvoi(e.target.value)}
+                rows={4}
+                className="resize-none"
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setRenvoyerDialogOpen(false);
+                setCommentaireRenvoi("");
+              }}
+            >
+              Annuler
+            </Button>
+            <Button
+              onClick={handleRenvoyer}
+              className="border-purple-300 text-purple-700 hover:bg-purple-50"
+              variant="outline"
+            >
+              <Forward className="h-4 w-4 mr-2" />
+              Renvoyer
             </Button>
           </DialogFooter>
         </DialogContent>

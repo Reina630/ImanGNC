@@ -25,7 +25,7 @@ export function UserManagementDialog({ open, onOpenChange, user }: UserManagemen
     username: "",
     email: "",
     password: "",
-    role: "client" as "admin" | "collaborator" | "client",
+    role: "client" as 'admin' | 'rh' | 'dg' | 'collaborator' | 'client',
     service: null as number | null,
   });
 
@@ -56,14 +56,22 @@ export function UserManagementDialog({ open, onOpenChange, user }: UserManagemen
 
   const handleSubmit = async () => {
     if (!user) {
-      // Création
+      // Création (API: username, email, password, role, service)
       if (!formData.username || !formData.email || !formData.password) {
         return;
       }
-      await createMutation.mutateAsync({
-        ...formData,
-        service: formData.service || undefined,
-      });
+      const createPayload: any = {
+        username: formData.username,
+        email: formData.email,
+        password: formData.password,
+        role: ['admin', 'collaborator', 'client', 'rh', 'dg'].includes(formData.role)
+          ? formData.role
+          : 'client',
+      };
+      if (formData.service) {
+        createPayload.service = formData.service;
+      }
+      await createMutation.mutateAsync(createPayload);
     } else {
       // Modification (sans le password s'il est vide)
       const updateData: any = {
@@ -93,8 +101,10 @@ export function UserManagementDialog({ open, onOpenChange, user }: UserManagemen
               : "Créez un nouveau compte utilisateur"}
           </DialogDescription>
         </DialogHeader>
-        
-        <div className="space-y-4 py-4">
+
+        {/* Inputs en 2 colonnes */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 py-4">
+          {/* Col 1: Username */}
           <div>
             <label className="text-sm font-medium mb-2 block">
               <UserIcon className="h-3.5 w-3.5 inline mr-1" />
@@ -108,6 +118,7 @@ export function UserManagementDialog({ open, onOpenChange, user }: UserManagemen
             />
           </div>
 
+          {/* Col 2: Email */}
           <div>
             <label className="text-sm font-medium mb-2 block">
               <Mail className="h-3.5 w-3.5 inline mr-1" />
@@ -122,10 +133,11 @@ export function UserManagementDialog({ open, onOpenChange, user }: UserManagemen
             />
           </div>
 
+          {/* Col 1: Mot de passe */}
           <div>
             <label className="text-sm font-medium mb-2 block">
               <Lock className="h-3.5 w-3.5 inline mr-1" />
-              Mot de passe {user && <span className="text-muted-foreground text-xs">(laisser vide pour ne pas modifier)</span>}
+              Mot de passe {user && <span className="text-muted-foreground text-xs"></span>}
               {!user && <span className="text-destructive">*</span>}
             </label>
             <Input
@@ -137,6 +149,7 @@ export function UserManagementDialog({ open, onOpenChange, user }: UserManagemen
             />
           </div>
 
+          {/* Col 2: Rôle */}
           <div>
             <label className="text-sm font-medium mb-2 block">
               <Shield className="h-3.5 w-3.5 inline mr-1" />
@@ -147,18 +160,24 @@ export function UserManagementDialog({ open, onOpenChange, user }: UserManagemen
               onChange={(e) => setFormData({ ...formData, role: e.target.value as any })}
               className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm"
             >
-              <option value="client">Client (Lecture seule)</option>
-              <option value="collaborator">Collaborateur (Peut créer et modifier)</option>
-              <option value="admin">Administrateur (Accès complet)</option>
+              
+              {/* <option value="collaborator">Collaborateur</option> */}
+              <option value="dg">Directeur Général</option>
+              <option value="rh">RH</option>
+              <option value="collaborator">Utilisateur</option>
+              <option value="admin">Administrateur</option>
             </select>
             <p className="text-xs text-muted-foreground mt-1">
-              {formData.role === "admin" && "Accès complet au système, gestion des utilisateurs"}
-              {formData.role === "collaborator" && "Peut créer, modifier et supprimer des documents"}
-              {formData.role === "client" && "Peut uniquement consulter les documents partagés"}
+              {formData.role === "admin"}
+              {formData.role === "rh" }
+              {formData.role === "dg"}
+              {formData.role === "collaborator"}
+              {formData.role === "client"}
             </p>
           </div>
 
-          <div>
+          {/* Ligne entière: Service */}
+          <div className="md:col-span-2">
             <label className="text-sm font-medium mb-2 block">
               <Building2 className="h-3.5 w-3.5 inline mr-1" />
               Service

@@ -4,7 +4,7 @@
  */
 
 import { useState, useEffect, useRef } from "react";
-import { Camera, List, LogOut, RefreshCw, Mail, Calendar, Building2, ArrowLeft, Check, X, Loader2, Crop } from "lucide-react";
+import { Camera, List, LogOut, RefreshCw, Mail, Calendar, Building2, ArrowLeft, Check, X, Loader2, Crop, Plus, Trash2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -19,6 +19,7 @@ import scanService from "@/services/scanService";
 import type { Courrier, Categorie } from "@/types";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
+import { jsPDF } from "jspdf";
 
 export default function MobileScanPage() {
   const { toast } = useToast();
@@ -31,6 +32,7 @@ export default function MobileScanPage() {
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [capturedImage, setCapturedImage] = useState<string>("");
   const [scannedImage, setScannedImage] = useState<string>("");
+  const [scannedPages, setScannedPages] = useState<string[]>([]);  // Toutes les pages scannées
   const [originalFile, setOriginalFile] = useState<File | null>(null);
   const [corners, setCorners] = useState<number[][]>([]);
   const [imageSize, setImageSize] = useState({ width: 0, height: 0 });
@@ -276,8 +278,39 @@ export default function MobileScanPage() {
     startCamera();
   };
 
+  const addAnotherPage = () => {
+    // Ajouter la page actuelle à la liste
+    if (scannedImage) {
+      setScannedPages(prev => [...prev, scannedImage]);
+    }
+    // Réinitialiser pour scanner une nouvelle page
+    setScannedImage("");
+    setCapturedImage("");
+    setOriginalFile(null);
+    setCorners([]);
+    setScanStep("camera");
+    startCamera();
+    
+    toast({
+      title: `Page ${scannedPages.length + 1} ajoutée`,
+      description: "Prêt à scanner la page suivante",
+    });
+  };
+
   const proceedToForm = () => {
+    // Ajouter la dernière page scannée à la liste
+    if (scannedImage && !scannedPages.includes(scannedImage)) {
+      setScannedPages(prev => [...prev, scannedImage]);
+    }
     setScanStep("form");
+  };
+
+  const removePage = (index: number) => {
+    setScannedPages(prev => prev.filter((_, i) => i !== index));
+    toast({
+      title: "Page supprimée",
+      description: `Page ${index + 1} retirée du document`,
+    });
   };
 
   const cancelScan = () => {
@@ -285,6 +318,7 @@ export default function MobileScanPage() {
     setCapturedImage("");
     setOriginalFile(null);
     setCorners([]);
+    setScannedPages([]);
     setScanStep("camera");
     setFormData({
       type_courrier: "entrant",
@@ -297,14 +331,87 @@ export default function MobileScanPage() {
     });
   };
 
+  // Créer un PDF multi-pages à partir des images scannées
+  const createMultiPagePDF = async (imageDataUrls: string[]): Promise<Blob> => {
+    return new Promise((resolve, reject) => {
+      try {
+        // Créer un PDF en format A4
+        const pdf = new jsPDF({
+          orientation: 'portrait',
+          unit: 'mm',
+          format: 'a4'
+        });
+
+        let imagesProcessed = 0;
+        const totalImages = imageDataUrls.length;
+
+        imageDataUrls.forEach((dataUrl, index) => {
+          const img = new Image();
+          
+          img.onload = () => {
+            try {
+              // Dimensions de la page A4 en mm
+              const pageWidth = 210;
+              const pageHeight = 297;
+              
+              // Calculer les dimensions pour que l'image remplisse la page
+              const imgWidth = img.width;
+              const imgHeight = img.height;
+              const ratio = imgWidth / imgHeight;
+              
+              let finalWidth = pageWidth;
+              let finalHeight = pageWidth / ratio;
+              
+              // Si l'image est trop haute, on ajuste par la hauteur
+              if (finalHeight > pageHeight) {
+                finalHeight = pageHeight;
+                finalWidth = pageHeight * ratio;
+              }
+              
+              // Centrer l'image sur la page
+              const x = (pageWidth - finalWidth) / 2;
+              const y = (pageHeight - finalHeight) / 2;
+              
+              // Ajouter une nouvelle page pour chaque image sauf la première
+              if (index > 0) {
+                pdf.addPage();
+              }
+              
+              // Ajouter l'image au PDF
+              pdf.addImage(dataUrl, 'JPEG', x, y, finalWidth, finalHeight);
+              
+              imagesProcessed++;
+              
+              // Quand toutes les images sont traitées, créer le blob
+              if (imagesProcessed === totalImages) {
+                const pdfBlob = pdf.output('blob');
+                resolve(pdfBlob);
+              }
+            } catch (err) {
+              reject(err);
+            }
+          };
+          
+          img.onerror = () => {
+            reject(new Error(`Erreur de chargement de l'image ${index + 1}`));
+          };
+          
+          img.src = dataUrl;
+        });
+      } catch (error) {
+        reject(error);
+      }
+    });
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!formData.objet.trim() || !formData.nom.trim() || !scannedImage) {
+    if (!formData.objet.trim() || !formData.nom.trim() || scannedPages.length === 0) {
       toast({
         variant: "destructive",
         title: "Champs manquants",
-        description: "Veuillez remplir tous les champs obligatoires",
+        description: "Veuillez remplir tous les champs obligatoires et scanner au moins une page",
       });
       return;
     }
@@ -312,15 +419,26 @@ export default function MobileScanPage() {
     try {
       setSubmitting(true);
 
-      // Convertir l'image base64 en File
-      const response = await fetch(scannedImage);
-      const blob = await response.blob();
-      const file = new File([blob], `scan_${Date.now()}.jpg`, { type: 'image/jpeg' });
+      // Toast de progression pour la création du PDF
+      if (scannedPages.length > 1) {
+        toast({
+          title: "Création du PDF",
+          description: `Assemblage de ${scannedPages.length} pages en cours...`,
+        });
+      }
+
+      // Créer un PDF multi-pages avec toutes les pages scannées
+      const pdfBlob = await createMultiPagePDF(scannedPages);
+      const pdfFile = new File(
+        [pdfBlob], 
+        `courrier_scan_${Date.now()}.pdf`, 
+        { type: 'application/pdf' }
+      );
 
       const data = new FormData();
       data.append("type_courrier", formData.type_courrier);
       data.append("objet", formData.objet);
-      data.append("fichier", file);
+      data.append("fichier", pdfFile);
       
       if (formData.type_courrier === "entrant") {
         data.append("expediteur", formData.nom);
@@ -338,7 +456,7 @@ export default function MobileScanPage() {
 
       toast({
         title: "Courrier enregistré",
-        description: `${courrier.numero_registre} créé avec succès`,
+        description: `${courrier.numero_registre} créé avec succès (${scannedPages.length} page${scannedPages.length > 1 ? 's' : ''})`,
       });
 
       cancelScan();
@@ -658,24 +776,47 @@ export default function MobileScanPage() {
                 <ArrowLeft className="h-5 w-5" />
               </Button>
               <h2 className="text-lg font-semibold">Document scanné</h2>
+              {scannedPages.length > 0 && (
+                <Badge variant="secondary" className="ml-auto">
+                  {scannedPages.length + 1} page{scannedPages.length > 0 ? 's' : ''}
+                </Badge>
+              )}
             </div>
 
             <div className="rounded-xl overflow-hidden border bg-muted">
               <img
                 src={scannedImage}
                 alt="Document scanné"
-                className="w-full h-auto max-h-[65vh] object-contain mx-auto"
+                className="w-full h-auto max-h-[55vh] object-contain mx-auto"
               />
             </div>
             
+            {scannedPages.length > 0 && (
+              <div className="bg-muted/30 rounded-lg p-3">
+                <p className="text-sm text-center text-muted-foreground">
+                  {scannedPages.length} page{scannedPages.length > 1 ? 's' : ''} déjà scannée{scannedPages.length > 1 ? 's' : ''}
+                </p>
+              </div>
+            )}
+            
             <div className="flex flex-col gap-3 pt-4">
+              <Button
+                size="lg"
+                onClick={addAnotherPage}
+                variant="outline"
+                className="w-full"
+              >
+                <Plus className="h-5 w-5 mr-2" />
+                Scanner une autre page
+              </Button>
+              
               <Button
                 size="lg"
                 onClick={proceedToForm}
                 className="w-full"
               >
                 <Check className="h-5 w-5 mr-2" />
-                Continuer l'enregistrement
+                Terminer et enregistrer
               </Button>
               
               <div className="flex gap-3">
@@ -722,14 +863,43 @@ export default function MobileScanPage() {
                 <ArrowLeft className="h-5 w-5" />
               </Button>
               <h2 className="text-lg font-semibold">Enregistrer le courrier</h2>
+              <Badge variant="secondary" className="ml-auto">
+                {scannedPages.length} page{scannedPages.length > 1 ? 's' : ''}
+              </Badge>
             </div>
 
-            <div className="rounded-xl overflow-hidden border">
-              <img
-                src={scannedImage}
-                alt="Document scanné"
-                className="w-full h-auto"
-              />
+            {/* Galerie des pages scannées */}
+            <div className="space-y-3">
+              <Label className="text-sm font-medium">Pages du document</Label>
+              <div className="grid grid-cols-2 gap-3">
+                {scannedPages.map((page, index) => (
+                  <div key={index} className="relative group">
+                    <div className="rounded-lg overflow-hidden border bg-muted aspect-[3/4]">
+                      <img
+                        src={page}
+                        alt={`Page ${index + 1}`}
+                        className="w-full h-full object-contain"
+                      />
+                    </div>
+                    <div className="absolute top-2 right-2 flex gap-1">
+                      <Badge variant="secondary" className="text-xs">
+                        {index + 1}
+                      </Badge>
+                      {scannedPages.length > 1 && (
+                        <Button
+                          size="icon"
+                          variant="destructive"
+                          className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+                          onClick={() => removePage(index)}
+                          disabled={submitting}
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-4">

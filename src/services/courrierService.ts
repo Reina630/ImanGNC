@@ -57,10 +57,13 @@ const courrierService = {
   /**
    * Mettre à jour un courrier existant
    * @param id - ID du courrier
-   * @param data - Nouvelles données du courrier
+   * @param data - Nouvelles données du courrier (peut être JSON ou FormData avec fichier)
    */
-  updateCourrier: async (id: number, data: Partial<CourrierCreate>): Promise<Courrier> => {
-    const response = await api.patch(`/courriers/${id}/`, data);
+  updateCourrier: async (id: number, data: Partial<CourrierCreate> | FormData): Promise<Courrier> => {
+    const isFormData = data instanceof FormData;
+    const response = await api.patch(`/courriers/${id}/`, data, 
+      isFormData ? { headers: { 'Content-Type': undefined } } : undefined
+    );
     return response.data;
   },
 
@@ -152,6 +155,7 @@ const courrierService = {
     date_debut?: string;
     date_fin?: string;
     urgent?: boolean;
+    fields?: string; // colonnes séparées par des virgules
   }): Promise<Blob> => {
     const response = await api.get('/courriers/export_excel/', {
       params,
@@ -192,8 +196,12 @@ const courrierService = {
   /**
    * Helper pour télécharger l'export Excel avec un nom de fichier approprié
    */
-  telechargerExcel: async (params?: any): Promise<void> => {
-    const blob = await courrierService.exportExcel(params);
+  telechargerExcel: async (params?: any, fields?: string[]): Promise<void> => {
+    const exportParams = { ...params };
+    if (fields && fields.length > 0) {
+      exportParams.fields = fields.join(',');
+    }
+    const blob = await courrierService.exportExcel(exportParams);
     const url = window.URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
@@ -203,6 +211,25 @@ const courrierService = {
     link.click();
     link.remove();
     window.URL.revokeObjectURL(url);
+  },
+
+  /**
+   * Ajouter des pièces jointes à un courrier existant
+   */
+  ajouterPiecesJointes: async (courrierId: number, fichiers: File[]): Promise<any[]> => {
+    const formData = new FormData();
+    fichiers.forEach((f) => formData.append('fichiers', f));
+    const response = await api.post(`/courriers/${courrierId}/pieces_jointes/`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return response.data;
+  },
+
+  /**
+   * Supprimer une pièce jointe d'un courrier
+   */
+  supprimerPieceJointe: async (courrierId: number, pjId: number): Promise<void> => {
+    await api.delete(`/courriers/${courrierId}/pieces_jointes/${pjId}/`);
   },
 
   /**
@@ -262,11 +289,23 @@ const courrierService = {
    * @param courrierId - ID du courrier
    * @param serviceId - ID du service
    * @param note - Note optionnelle pour les utilisateurs
+   * @param niveauUrgence - Niveau d'urgence: faible, normal, eleve, critique
+   * @param dateEcheance - Date d'échéance pour le traitement (format YYYY-MM-DD)
    */
-  affecterServicePlateforme: async (courrierId: number, serviceId: number, note?: string): Promise<{ success: boolean; message: string; nombre_affectations: number }> => {
+  affecterServicePlateforme: async (
+    courrierId: number, 
+    serviceId: number, 
+    note?: string,
+    niveauUrgence?: string,
+    dateEcheance?: string,
+    actionRequise?: string
+  ): Promise<{ success: boolean; message: string; nombre_affectations: number }> => {
     const response = await api.post(`/courriers/${courrierId}/affecter_service/`, {
       service_id: serviceId,
       note: note || '',
+      niveau_urgence: niveauUrgence || 'normal',
+      date_echeance: dateEcheance || null,
+      action_requise: actionRequise || 'informatif',
     });
     
     return {
@@ -318,7 +357,15 @@ const courrierService = {
    * @param affectationId - ID de l'affectation
    */
   marquerAffectationLue: async (affectationId: number): Promise<void> => {
-    await api.post(`/affectations/${affectationId}/marquer_lu/`);
+    await api.post(`/affectations/affectations/${affectationId}/marquer_lu/`);
+  },
+
+  /**
+   * Commencer le traitement d'une affectation (passer de 'lu' ou 'en_attente' à 'en_traitement')
+   * @param affectationId - ID de l'affectation
+   */
+  commencerTraitement: async (affectationId: number): Promise<void> => {
+    await api.post(`/affectations/affectations/${affectationId}/demarrer/`);
   },
 
   /**
@@ -342,17 +389,17 @@ const courrierService = {
     
     switch (action) {
       case 'valider':
-        response = await api.post(`/affectations/${affectationId}/valider/`, {
+        response = await api.post(`/affectations/affectations/${affectationId}/valider/`, {
           commentaire: commentaire || '',
         });
         break;
       case 'rejeter':
-        response = await api.post(`/affectations/${affectationId}/rejeter/`, {
+        response = await api.post(`/affectations/affectations/${affectationId}/rejeter/`, {
           motif: motifRejet || '',
         });
         break;
       case 'signer':
-        response = await api.post(`/affectations/${affectationId}/signer/`, {
+        response = await api.post(`/affectations/affectations/${affectationId}/signer/`, {
           commentaire: commentaire || '',
           position: position || { x: 100, y: 100 },
           size: size || { width: 200, height: 80 },
@@ -372,7 +419,7 @@ const courrierService = {
    * @param contenu - Contenu du commentaire
    */
   commenterAffectation: async (affectationId: number, contenu: string): Promise<{ message: string; commentaire: any }> => {
-    const response = await api.post(`/affectations/${affectationId}/commentaires/`, {
+    const response = await api.post(`/affectations/affectations/${affectationId}/commentaires/`, {
       contenu,
     });
     
@@ -380,6 +427,33 @@ const courrierService = {
       message: 'Commentaire ajouté avec succès',
       commentaire: response.data
     };
+  },
+
+  /**
+   * Accuser réception d'une affectation (action_requise = 'accusation_reception')
+   */
+  accuserReception: async (affectationId: number, commentaire?: string): Promise<void> => {
+    await api.post(`/affectations/affectations/${affectationId}/valider/`, {
+      commentaire: commentaire || '',
+    });
+  },
+
+  /**
+   * Répondre à un courrier (action_requise = 'a_repondre')
+   */
+  repondreAffectation: async (affectationId: number, commentaire?: string): Promise<void> => {
+    await api.post(`/affectations/affectations/${affectationId}/valider/`, {
+      commentaire: commentaire || '',
+    });
+  },
+
+  /**
+   * Renvoyer un courrier
+   */
+  renvoyerAffectation: async (affectationId: number, commentaire?: string): Promise<void> => {
+    await api.post(`/affectations/affectations/${affectationId}/renvoyer/`, {
+      commentaire: commentaire || '',
+    });
   },
 
   /**
@@ -391,7 +465,20 @@ const courrierService = {
     affectationId: number,
     data: { service_id: number; mode?: string }
   ): Promise<{ message: string; nb_affectations?: number; service?: string }> => {
-    const response = await api.post(`/affectations/${affectationId}/reaffecter/`, data);
+    const response = await api.post(`/affectations/affectations/${affectationId}/renvoyer/`, data);
+    return response.data;
+  },
+
+  /**
+   * Rechercher des courriers pour la liste déroulante
+   * @param params - Paramètres de recherche (q: texte, type: entrant/sortant/interne, exclude: id à exclure)
+   */
+  searchCourriers: async (params?: {
+    q?: string;
+    type?: 'entrant' | 'sortant' | 'interne';
+    exclude?: number;
+  }): Promise<import('@/types').CourrierSearchResult[]> => {
+    const response = await api.get('/courriers/search-courriers/', { params });
     return response.data;
   },
 };

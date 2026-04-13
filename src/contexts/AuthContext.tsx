@@ -11,6 +11,8 @@ interface AuthContextType {
   logout: () => Promise<void>;
   isAuthenticated: boolean;
   isAdmin: boolean;
+  isRH: boolean;
+  isDG: boolean;
   isRHOrAdmin: boolean;
 }
 
@@ -66,7 +68,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     logout,
     isAuthenticated: !!user,
     isAdmin: user?.role === 'admin',
-    isRHOrAdmin: user?.role === 'admin' || user?.role === 'rh',
+    isRH: user?.role === 'rh',
+    isDG: user?.role === 'dg',
+    isRHOrAdmin: user?.role === 'admin' || user?.role === 'rh' || user?.role === 'dg',
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -47,7 +47,7 @@ export function CommentairesDialog({
     
     setLoading(true);
     try {
-      const response = await api.get(`/affectations/${affectationId}/commentaires/`);
+      const response = await api.get(`/affectations/affectations/${affectationId}/commentaires/`);
       setCommentaires(response.data);
     } catch (error) {
       console.error("Erreur lors du chargement des commentaires:", error);
@@ -66,7 +66,7 @@ export function CommentairesDialog({
 
     setSubmitting(true);
     try {
-      const response = await api.post(`/affectations/${affectationId}/commentaires/`, {
+      const response = await api.post(`/affectations/affectations/${affectationId}/commentaires/`, {
         contenu: nouveauCommentaire.trim(),
       });
 

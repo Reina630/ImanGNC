@@ -1,3 +1,4 @@
+
 import { api } from './index';
 
 export interface DetectResponse {
@@ -8,6 +9,24 @@ export interface DetectResponse {
 
 export interface WarpResponse {
   image: string; // Image en base64
+}
+
+export interface ExtractedDocumentFields {
+  objet: string;
+  expediteur: string;
+  destinataire: string;
+  date_courrier: string;
+  reference_structure: string;
+  type_courrier: 'entrant' | 'sortant' | 'interne';
+  notes: string;
+}
+
+export interface ExtractResponse {
+  fields: ExtractedDocumentFields;
+  ocr_used: boolean;
+  text_length: number;
+  warning?: string;
+  extracted_text?: string;  // Pour debug
 }
 
 const scanService = {
@@ -37,6 +56,16 @@ const scanService = {
       },
     });
 
+    return response.data;
+  },
+
+  // Extrait les informations d'un document via OCR (Tesseract)
+  extractDocumentInfo: async (file: File): Promise<ExtractResponse> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await api.post('/scan/extract/', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
     return response.data;
   },
 };

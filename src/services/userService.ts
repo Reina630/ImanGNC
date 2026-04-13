@@ -28,7 +28,7 @@ export const userService = {
     username: string;
     email: string;
     password: string;
-    role: 'admin' | 'collaborator' | 'client';
+    role: 'admin' | 'collaborator' | 'client' | 'rh' | 'dg';
   }): Promise<User> {
     const response = await api.post<User>('/users/', data);
     return response.data;

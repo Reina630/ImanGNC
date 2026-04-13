@@ -23,6 +23,7 @@ import {
   ChevronDown,
   ChevronUp,
   X,
+  Reply,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -42,15 +43,18 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
 import courrierService from "@/services/courrierService";
 import type { Courrier, CourrierStatistics, CourrierFilters, Service } from "@/types";
 import { STATUT_CHOICES } from "@/types";
 import { AffecterServiceDialog } from "@/components/AffecterServiceDialog";
+import { ExportExcelDialog, type ExportFilters } from "@/components/ExportExcelDialog";
 import { useCategories } from "@/services/categoryHooks";
 
 export default function RegistreCourrierPage() {
   const { toast } = useToast();
   const navigate = useNavigate();
+  const { isDG, isRH, isAdmin } = useAuth();
   
   // États
   const [allCourriers, setAllCourriers] = useState<Courrier[]>([]); // Tous les courriers
@@ -59,6 +63,7 @@ export default function RegistreCourrierPage() {
   const [services, setServices] = useState<Service[]>([]);
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
+  const [exportDialogOpen, setExportDialogOpen] = useState(false);
   const [selectedCourrier, setSelectedCourrier] = useState<Courrier | null>(null);
   const [affecterDialogOpen, setAffecterDialogOpen] = useState(false);
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
@@ -296,11 +301,14 @@ export default function RegistreCourrierPage() {
   /**
    * Exporter le registre en Excel
    */
-  const handleExport = async () => {
+  const handleExport = async (exportFilters: ExportFilters, fields: string[]) => {
     try {
       setExporting(true);
-      // Exporter avec les filtres actuels
-      await courrierService.telechargerExcel(filters);
+      // Fusionner les filtres de la page avec ceux du dialog (le dialog prend la priorité)
+      const { concerne, ...restExportFilters } = exportFilters as any;
+      const mergedFilters: any = { ...filters, ...restExportFilters };
+      if (concerne) mergedFilters.concerne = concerne;
+      await courrierService.telechargerExcel(mergedFilters, fields);
       toast({
         title: "Export réussi",
         description: "Le registre a été exporté en Excel",
@@ -316,6 +324,16 @@ export default function RegistreCourrierPage() {
       setExporting(false);
     }
   };
+
+  // Liste unique d'expéditeurs + destinataires issus des courriers chargés
+  const contactsList = Array.from(
+    new Set(
+      allCourriers.flatMap((c) => [
+        c.expediteur,
+        c.destinataire,
+      ]).filter(Boolean)
+    )
+  ).sort();
 
   /**
    * Télécharger le fichier d'un courrier
@@ -472,7 +490,7 @@ export default function RegistreCourrierPage() {
         
         <div className="flex gap-2">
           <Button
-            onClick={handleExport}
+            onClick={() => setExportDialogOpen(true)}
             disabled={exporting}
             variant="outline"
           >
@@ -486,16 +504,18 @@ export default function RegistreCourrierPage() {
             )}
           </Button>
           
-          <Button onClick={() => navigate("/courriers/nouveau")}>
-            <Plus className="h-4 w-4 mr-2" />
-            Nouveau courrier
-          </Button>
+          {!isDG && (
+            <Button onClick={() => navigate("/courriers/nouveau")}>
+              <Plus className="h-4 w-4 mr-2" />
+              Nouveau courrier
+            </Button>
+          )}
         </div>
       </div>
 
       {/* Statistiques */}
       {statistics && (
-        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4">
           <div className="stat-card">
             <div className="flex items-center justify-between">
               <div>
@@ -536,7 +556,7 @@ export default function RegistreCourrierPage() {
             </div>
           </div>
 
-          <div className="stat-card">
+          {/* <div className="stat-card">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">En traitement</p>
@@ -546,7 +566,7 @@ export default function RegistreCourrierPage() {
               </div>
               <Clock className="h-8 w-8 text-amber-600 opacity-20" />
             </div>
-          </div>
+          </div> */}
         </div>
       )}
 
@@ -997,7 +1017,7 @@ export default function RegistreCourrierPage() {
                                 <MoreHorizontal className="h-4 w-4" />
                               </Button>
                             </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="w-48">
+                            <DropdownMenuContent align="end" className="w-52">
                               <DropdownMenuItem
                                 onClick={() => navigate(`/courriers/${courrier.id}`)}
                                 className="font-medium"
@@ -1005,15 +1025,31 @@ export default function RegistreCourrierPage() {
                                 <Eye className="h-4 w-4 mr-2" />
                                 Voir détails
                               </DropdownMenuItem>
-                              <DropdownMenuItem
-                                onClick={() => {
-                                  setSelectedCourrier(courrier);
-                                  setAffecterDialogOpen(true);
-                                }}
-                              >
-                                <Building2 className="h-4 w-4 mr-2" />
-                                Affecter à un service
-                              </DropdownMenuItem>
+
+                              {/* Répondre — disponible uniquement pour les courriers entrants et internes, masqué pour DG */}
+                              {!isDG && (courrier.type_courrier === 'entrant' || courrier.type_courrier === 'interne') && (
+                                <DropdownMenuItem
+                                  onClick={() => navigate(`/courriers/repondre/${courrier.id}`)}
+                                  className="text-emerald-700 focus:text-emerald-700"
+                                >
+                                  <Reply className="h-4 w-4 mr-2" />
+                                  Répondre
+                                </DropdownMenuItem>
+                              )}
+
+                              {/* Option "Affecter" - cachée pour DG */}
+                              {!isDG && (
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    setSelectedCourrier(courrier);
+                                    setAffecterDialogOpen(true);
+                                  }}
+                                >
+                                  <Building2 className="h-4 w-4 mr-2" />
+                                  Affecter à un service
+                                </DropdownMenuItem>
+                              )}
+                              
                               <DropdownMenuItem
                                 onClick={() => handleToggleUrgent(courrier.id)}
                                 className={courrier.urgent ? "text-amber-700" : ""}
@@ -1021,14 +1057,20 @@ export default function RegistreCourrierPage() {
                                 <Zap className={`h-4 w-4 mr-2 ${courrier.urgent ? 'fill-amber-500 text-amber-500' : ''}`} />
                                 {courrier.urgent ? "Retirer urgent" : "Marquer urgent"}
                               </DropdownMenuItem>
-                              <DropdownMenuSeparator />
-                              <DropdownMenuItem
-                                onClick={() => handleArchive(courrier.id)}
-                                className="text-red-600"
-                              >
-                                <Archive className="h-4 w-4 mr-2" />
-                                Archiver
-                              </DropdownMenuItem>
+                              
+                              {/* Archiver - masqué pour DG */}
+                              {!isDG && (
+                                <>
+                                  <DropdownMenuSeparator />
+                                  <DropdownMenuItem
+                                    onClick={() => handleArchive(courrier.id)}
+                                    className="text-red-600"
+                                  >
+                                    <Archive className="h-4 w-4 mr-2" />
+                                    Archiver
+                                  </DropdownMenuItem>
+                                </>
+                              )}
                             </DropdownMenuContent>
                           </DropdownMenu>
                         </div>
@@ -1050,6 +1092,14 @@ export default function RegistreCourrierPage() {
         onSuccess={() => {
           loadCourriers();
         }}
+      />
+
+      {/* Dialog d'export Excel */}
+      <ExportExcelDialog
+        open={exportDialogOpen}
+        onClose={() => setExportDialogOpen(false)}
+        contacts={contactsList}
+        onExport={handleExport}
       />
     </motion.div>
   );

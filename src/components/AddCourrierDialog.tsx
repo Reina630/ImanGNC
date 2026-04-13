@@ -15,6 +15,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -27,6 +28,7 @@ import courrierService from "@/services/courrierService";
 import categoryService from "@/services/categoryService";
 import type { Categorie } from "@/types";
 import { MODE_CHOICES, SERVICE_CHOICES } from "@/types";
+import { CourrierCombobox } from "@/components/CourrierCombobox";
 
 interface AddCourrierDialogProps {
   open: boolean;
@@ -56,8 +58,10 @@ export function AddCourrierDialog({
     service_emetteur: "", // Pour courrier interne
     service_destinataire: "", // Pour courrier interne
     objet: "",
-    reference: "",
+    reference_structure: "",
     categorie: "",
+    reponse_a: null as number | null,
+    notes: "",
   });
   
   const [fichier, setFichier] = useState<File | null>(null);
@@ -92,8 +96,10 @@ export function AddCourrierDialog({
         service_emetteur: "",
         service_destinataire: "",
         objet: "",
-        reference: "",
+        reference_structure: "",
         categorie: "",
+        reponse_a: null,
+        notes: "",
       });
       // Utiliser le fichier initial si fourni, sinon null
       setFichier(initialFile || null);
@@ -197,13 +203,23 @@ export function AddCourrierDialog({
       }
       
       // Référence optionnelle
-      if (formData.reference) {
-        data.append("reference", formData.reference);
+      if (formData.reference_structure) {
+        data.append("reference_structure", formData.reference_structure);
+      }
+      
+      // En réponse à (pour courrier entrant ou sortant)
+      if (formData.reponse_a) {
+        data.append("reponse_a", formData.reponse_a.toString());
       }
       
       // Catégorie optionnelle
       if (formData.categorie) {
         data.append("categorie", formData.categorie);
+      }
+      
+      // Notes / observations optionnelles
+      if (formData.notes.trim()) {
+        data.append("notes", formData.notes);
       }
       
       // Statut par défaut
@@ -266,7 +282,7 @@ export function AddCourrierDialog({
           </DialogTitle>
           <DialogDescription>
             Enregistrement simplifié : type, référence, date, provenance/destination et fichier.
-            Le numéro de registre sera généré automatiquement.
+            Le numéro de registre sera généré automatiquement (ex: ENT-2026-03-0001).
           </DialogDescription>
         </DialogHeader>
 
@@ -321,27 +337,43 @@ export function AddCourrierDialog({
               </Label>
               <Input
                 id="numero_ordre"
-                value="(Sera généré automatiquement)"
+                value="Ex: ENT-2026-03-0001 (généré automatiquement)"
                 disabled
                 className="bg-muted text-muted-foreground"
               />
             </div>
           </div>
 
-          {/* Référence (uniquement pour courrier sortant) */}
+          {/* Champs de référence */}
+          <div className="space-y-2">
+            <Label htmlFor="reference_structure">
+              Référence de la structure
+            </Label>
+            <Input
+              id="reference_structure"
+              placeholder="Ex: Réf. organisme externe"
+              value={formData.reference_structure}
+              onChange={(e) => setFormData({ ...formData, reference_structure: e.target.value })}
+            />
+            <p className="text-xs text-muted-foreground">
+              Référence de la structure externe (optionnel)
+            </p>
+          </div>
+
+          {/* En réponse à (uniquement pour courrier sortant) */}
           {formData.type_courrier === "sortant" && (
             <div className="space-y-2">
-              <Label htmlFor="reference">
-                Référence (optionnel)
+              <Label htmlFor="reponse_a">
+                En réponse à (optionnel)
               </Label>
-              <Input
-                id="reference"
-                placeholder="Ex: Réf. courrier entrant N°2026-045"
-                value={formData.reference}
-                onChange={(e) => setFormData({ ...formData, reference: e.target.value })}
+              <CourrierCombobox
+                value={formData.reponse_a}
+                onValueChange={(value) => setFormData({ ...formData, reponse_a: value })}
+                placeholder="Sélectionner un courrier..."
+                typeCourrier="entrant"
               />
               <p className="text-xs text-muted-foreground">
-                Pour référencer un courrier entrant auquel vous répondez
+                Sélectionner le courrier auquel vous répondez
               </p>
             </div>
           )}
@@ -399,6 +431,19 @@ export function AddCourrierDialog({
                 {errors.nom && (
                   <p className="text-sm text-red-500">{errors.nom}</p>
                 )}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="reponse_a_entrant">En réponse à (optionnel)</Label>
+                <CourrierCombobox
+                  value={formData.reponse_a}
+                  onValueChange={(value) => setFormData({ ...formData, reponse_a: value })}
+                  placeholder="Sélectionner un courrier..."
+                  typeCourrier="sortant"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Sélectionner le courrier entrant auquel vous répondez
+                </p>
               </div>
             </>
           )}
@@ -572,30 +617,37 @@ export function AddCourrierDialog({
             </Select>
           </div>
 
+          {/* Notes / Observations */}
+          <div className="space-y-2">
+            <Label htmlFor="notes">Notes / Observations</Label>
+            <Textarea
+              id="notes"
+              placeholder="Observations, remarques ou informations complémentaires..."
+              value={formData.notes}
+              onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+              rows={3}
+            />
+          </div>
+
           {/* Upload fichier */}
           <div className="space-y-2">
             <Label htmlFor="fichier" className="required flex items-center gap-2">
               <Upload className="h-4 w-4" />
               Fichier scanné
             </Label>
-            <div className="border-2 border-dashed rounded-lg p-4 hover:border-primary transition-colors">
-              <Input
-                id="fichier"
-                type="file"
-                accept=".pdf,.jpg,.jpeg,.png,.gif"
-                onChange={handleFileChange}
-                className="cursor-pointer"
-              />
-              <p className="text-xs text-muted-foreground mt-2">
-                Formats acceptés : PDF, JPG, PNG, GIF (max 10 Mo)
+            <Input
+              id="fichier"
+              type="file"
+              accept=".pdf,.jpg,.jpeg,.png"
+              onChange={handleFileChange}
+              required
+            />
+            {fichier && (
+              <p className="text-sm text-green-600 mt-2 flex items-center gap-2">
+                <FileText className="h-4 w-4" />
+                {fichier.name} ({(fichier.size / 1024).toFixed(1)} Ko)
               </p>
-              {fichier && (
-                <p className="text-sm text-green-600 mt-2 flex items-center gap-2">
-                  <FileText className="h-4 w-4" />
-                  {fichier.name} ({(fichier.size / 1024).toFixed(1)} Ko)
-                </p>
-              )}
-            </div>
+            )}
             {errors.fichier && (
               <p className="text-sm text-red-500">{errors.fichier}</p>
             )}

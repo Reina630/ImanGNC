@@ -1,10 +1,11 @@
-import { Search, Upload, ScanLine, Bell, Moon, Sun, Menu, LogOut, Settings as SettingsIcon, User } from "lucide-react";
-import { useState } from "react";
+import { Search, Upload, ScanLine, Bell, Moon, Sun, Menu, LogOut, Settings as SettingsIcon, User, Building2, Mail, FileText } from "lucide-react";
+import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -15,6 +16,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
 import NotificationsDropdown from "@/components/NotificationsDropdown";
+import courrierService from "@/services/courrierService";
+import type { Courrier } from "@/types";
 
 interface TopBarProps {
   onMobileMenuToggle?: () => void;
@@ -22,6 +25,10 @@ interface TopBarProps {
 
 export default function TopBar({ onMobileMenuToggle }: TopBarProps) {
   const [darkMode, setDarkMode] = useState(false);
+  const [search, setSearch] = useState("");
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [courriers, setCourriers] = useState<Courrier[]>([]);
+  const [loadingCourriers, setLoadingCourriers] = useState(false);
   const navigate = useNavigate();
   const { user, logout } = useAuth();
   const { toast } = useToast();
@@ -71,6 +78,68 @@ export default function TopBar({ onMobileMenuToggle }: TopBarProps) {
     return roles[user.role] || user.role;
   };
 
+  // Charger les courriers pour extraire les contacts
+  useEffect(() => {
+    const fetchCourriers = async () => {
+      if (search.length >= 2) {
+        try {
+          setLoadingCourriers(true);
+          const data = await courrierService.getCourriers();
+          setCourriers(data);
+        } catch (error) {
+          console.error("Erreur lors du chargement des courriers:", error);
+        } finally {
+          setLoadingCourriers(false);
+        }
+      }
+    };
+
+    const timer = setTimeout(fetchCourriers, 300); // Debounce
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  // Extraire les contacts uniques
+  const allContacts = useMemo(() => {
+    const contactsSet = new Set<string>();
+    courriers.forEach((c) => {
+      if (c.expediteur) contactsSet.add(c.expediteur);
+      if (c.destinataire) contactsSet.add(c.destinataire);
+    });
+    return Array.from(contactsSet).sort();
+  }, [courriers]);
+
+  // Suggestions filtrées
+  const suggestions = useMemo(() => {
+    if (!search || search.length < 2) return { contacts: [], courriers: [] };
+    
+    const searchLower = search.toLowerCase();
+    
+    // Contacts qui matchent
+    const matchingContacts = allContacts.filter(contact => 
+      contact.toLowerCase().includes(searchLower)
+    ).slice(0, 5);
+    
+    // Courriers qui matchent (par objet ou numéro registre)
+    const matchingCourriers = courriers.filter(c => 
+      c.objet?.toLowerCase().includes(searchLower) ||
+      c.numero_registre?.toLowerCase().includes(searchLower)
+    ).slice(0, 3);
+    
+    return { contacts: matchingContacts, courriers: matchingCourriers };
+  }, [search, allContacts, courriers]);
+
+  const handleContactClick = (contact: string) => {
+    setSearch("");
+    setShowSuggestions(false);
+    navigate(`/courriers/entite/${encodeURIComponent(contact)}`);
+  };
+
+  const handleCourrierClick = (courrierId: number) => {
+    setSearch("");
+    setShowSuggestions(false);
+    navigate(`/courriers/${courrierId}`);
+  };
+
   return (
     <header className="h-16 border-b border-border bg-card/80 backdrop-blur-md sticky top-0 z-30 flex items-center px-4 lg:px-6 gap-4">
       {/* Mobile menu */}
@@ -79,12 +148,86 @@ export default function TopBar({ onMobileMenuToggle }: TopBarProps) {
       </button>
 
       {/* Search */}
-      <div className="max-w-xl relative">
+      <div className="max-w-xl relative flex-1">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         <Input
-          placeholder="Rechercher des documents..."
+          placeholder="Rechercher un contact, courrier..."
+          value={search}
+          onChange={(e) => {
+            setSearch(e.target.value);
+            setShowSuggestions(true);
+          }}
+          onFocus={() => setShowSuggestions(true)}
+          onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
           className="pl-10 bg-muted/50 border-0 focus-visible:ring-1 focus-visible:ring-primary/30"
         />
+        
+        {/* Suggestions dropdown */}
+        <AnimatePresence>
+          {showSuggestions && search.length >= 2 && (suggestions.contacts.length > 0 || suggestions.courriers.length > 0) && (
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="absolute top-full left-0 right-0 mt-1 bg-card border border-border rounded-lg shadow-lg z-50 max-h-96 overflow-y-auto"
+            >
+              {/* Section Contacts */}
+              {suggestions.contacts.length > 0 && (
+                <div className="p-2">
+                  <div className="text-[10px] font-semibold text-muted-foreground uppercase px-2 py-1.5 flex items-center gap-1.5">
+                    <User className="h-3 w-3" />
+                    Contacts
+                  </div>
+                  {suggestions.contacts.map((contact, idx) => (
+                    <button
+                      key={`contact-${idx}`}
+                      onClick={() => handleContactClick(contact)}
+                      className="w-full text-left px-3 py-2 rounded hover:bg-accent transition-colors flex items-center gap-2 group"
+                    >
+                      <Building2 className="h-4 w-4 text-muted-foreground group-hover:text-primary" />
+                      <span className="text-sm text-foreground group-hover:text-primary font-medium">{contact}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+              
+              {/* Section Courriers */}
+              {suggestions.courriers.length > 0 && (
+                <div className="p-2 border-t border-border">
+                  <div className="text-[10px] font-semibold text-muted-foreground uppercase px-2 py-1.5 flex items-center gap-1.5">
+                    <Mail className="h-3 w-3" />
+                    Courriers
+                  </div>
+                  {suggestions.courriers.map((courrier) => (
+                    <button
+                      key={courrier.id}
+                      onClick={() => handleCourrierClick(courrier.id)}
+                      className="w-full text-left px-3 py-2 rounded hover:bg-accent transition-colors group"
+                    >
+                      <div className="flex items-start gap-2">
+                        <FileText className="h-4 w-4 mt-0.5 text-muted-foreground group-hover:text-primary" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm text-foreground group-hover:text-primary font-medium truncate">
+                            {courrier.objet}
+                          </p>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            {courrier.numero_registre} • {courrier.date_courrier ? new Date(courrier.date_courrier).toLocaleDateString('fr-FR') : 'N/A'}
+                          </p>
+                        </div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+              
+              {loadingCourriers && (
+                <div className="p-4 text-center text-sm text-muted-foreground">
+                  Recherche en cours...
+                </div>
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
       {/* Actions */}

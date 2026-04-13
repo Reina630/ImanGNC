@@ -1,20 +1,24 @@
 import { useState } from "react";
-import { Users, Shield, Plus, Pencil, Trash2, Loader2, AlertCircle, FolderOpen, Building2, FileSignature } from "lucide-react";
+import { Users, Shield, Plus, Pencil, Trash2, Loader2, AlertCircle, FolderOpen, Building2, FileSignature, RefreshCw, Palette, Check } from "lucide-react";
+import { useTheme } from "@/contexts/ThemeContext";
 import { motion } from "framer-motion";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
+import { useAuth } from "@/contexts/AuthContext";
 import { UserManagementDialog } from "@/components/UserManagementDialog";
 import { CategoryManagementDialog } from "@/components/CategoryManagementDialog";
 import { ServiceManagementDialog } from "@/components/ServiceManagementDialog";
 import { SignatureForm } from "@/components/SignatureForm";
-import { useUsers, useDeleteUser } from "@/services";
+import { useUsers, useUpdateUser } from "@/services";
 import { useCategories, useDeleteCategory } from "@/services/categoryHooks";
 import { useServices, useDeleteService } from "@/services/serviceHooks";
 import type { User, Categorie } from "@/types";
 import type { Service } from "@/services/serviceService";
 
 export default function AdminPanel() {
+  const { isAdmin, isRH } = useAuth();
+  const { currentTheme, setTheme, themes } = useTheme();
   const [showUserDialog, setShowUserDialog] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [showCategoryDialog, setShowCategoryDialog] = useState(false);
@@ -23,7 +27,7 @@ export default function AdminPanel() {
   const [editingService, setEditingService] = useState<Service | null>(null);
   
   const { data: users = [], isLoading: usersLoading, error: usersError } = useUsers();
-  const deleteMutation = useDeleteUser();
+  const updateUserMutation = useUpdateUser();
 
   const { data: categories = [], isLoading: categoriesLoading, error: categoriesError } = useCategories();
   const deleteCategoryMutation = useDeleteCategory();
@@ -41,10 +45,11 @@ export default function AdminPanel() {
     setShowUserDialog(true);
   };
 
-  const handleDeleteUser = async (userId: number) => {
-    if (confirm('Êtes-vous sûr de vouloir désactiver cet utilisateur ?')) {
-      await deleteMutation.mutateAsync(userId);
+  const handleToggleActiveUser = async (user: User) => {
+    if (user.is_active) {
+      if (!confirm('Êtes-vous sûr de vouloir désactiver cet utilisateur ?')) return;
     }
+    await updateUserMutation.mutateAsync({ id: user.id, data: { is_active: !user.is_active } });
   };
 
   const handleEditCategory = (category: Categorie) => {
@@ -110,24 +115,32 @@ export default function AdminPanel() {
       </div>
 
       {/* Tabs */}
-      <Tabs defaultValue="users" className="space-y-5">
+      <Tabs defaultValue={(isAdmin || isRH) ? "users" : "signature"} className="space-y-5">
         <TabsList className="bg-muted/50 h-auto p-1">
-          <TabsTrigger value="users" className="gap-1.5 text-xs sm:text-sm">
-            <Users className="h-3.5 w-3.5" /> Utilisateurs
-          </TabsTrigger>
-          <TabsTrigger value="services" className="gap-1.5 text-xs sm:text-sm">
-            <Building2 className="h-3.5 w-3.5" /> Services
-          </TabsTrigger>
-          <TabsTrigger value="categories" className="gap-1.5 text-xs sm:text-sm">
-            <FolderOpen className="h-3.5 w-3.5" /> Catégories
-          </TabsTrigger>
+          {(isAdmin || isRH) && (
+            <>
+              <TabsTrigger value="users" className="gap-1.5 text-xs sm:text-sm">
+                <Users className="h-3.5 w-3.5" /> Utilisateurs
+              </TabsTrigger>
+              <TabsTrigger value="services" className="gap-1.5 text-xs sm:text-sm">
+                <Building2 className="h-3.5 w-3.5" /> Services
+              </TabsTrigger>
+              <TabsTrigger value="categories" className="gap-1.5 text-xs sm:text-sm">
+                <FolderOpen className="h-3.5 w-3.5" /> Catégories
+              </TabsTrigger>
+            </>
+          )}
           <TabsTrigger value="signature" className="gap-1.5 text-xs sm:text-sm">
             <FileSignature className="h-3.5 w-3.5" /> Signature
           </TabsTrigger>
+          <TabsTrigger value="appearance" className="gap-1.5 text-xs sm:text-sm">
+            <Palette className="h-3.5 w-3.5" /> Apparence
+          </TabsTrigger>
         </TabsList>
 
-        {/* Users Tab */}
-        <TabsContent value="users" className="space-y-4">
+        {/* Users Tab - Uniquement pour Admin et RH */}
+        {(isAdmin || isRH) && (
+          <TabsContent value="users" className="space-y-4">
           <div className="stat-card overflow-hidden p-0">
             <div className="p-5 border-b border-border flex items-center justify-between">
               <div>
@@ -171,7 +184,7 @@ export default function AdminPanel() {
                 </TableHeader>
                 <TableBody>
                   {users.map((u) => (
-                    <TableRow key={u.id}>
+                    <TableRow key={u.id} className={!u.is_active ? "opacity-60 bg-muted/40" : ""}>
                       <TableCell>
                         <div className="flex items-center gap-3">
                           <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-xs font-semibold text-primary">
@@ -212,15 +225,29 @@ export default function AdminPanel() {
                           >
                             <Pencil className="h-3.5 w-3.5" />
                           </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleDeleteUser(u.id)}
-                            className="h-8 w-8 p-0 text-destructive hover:text-destructive"
-                            disabled={deleteMutation.isPending}
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
+                          {u.is_active ? (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleToggleActiveUser(u)}
+                              className="h-8 w-8 p-0 text-destructive hover:text-destructive"
+                              disabled={updateUserMutation.isPending}
+                              title="Désactiver"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          ) : (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleToggleActiveUser(u)}
+                              className="h-8 w-8 p-0 text-emerald-500 hover:text-emerald-600"
+                              disabled={updateUserMutation.isPending}
+                              title="Réactiver"
+                            >
+                              <RefreshCw className="h-3.5 w-3.5" />
+                            </Button>
+                          )}
                         </div>
                       </TableCell>
                     </TableRow>
@@ -230,9 +257,11 @@ export default function AdminPanel() {
             )}
           </div>
         </TabsContent>
+        )}
 
-        {/* Services Tab */}
-        <TabsContent value="services" className="space-y-4">
+        {/* Services Tab - Uniquement pour Admin et RH */}
+        {(isAdmin || isRH) && (
+          <TabsContent value="services" className="space-y-4">
           <div className="stat-card overflow-hidden p-0">
             <div className="p-5 border-b border-border flex items-center justify-between">
               <div>
@@ -266,7 +295,7 @@ export default function AdminPanel() {
             ) : (
               <Table>
                 <TableHeader>
-                  <TableRow>
+                    <TableRow>
                     <TableHead>Nom</TableHead>
                     <TableHead>Description</TableHead>
                     <TableHead className="text-right">Utilisateurs</TableHead>
@@ -320,9 +349,11 @@ export default function AdminPanel() {
             )}
           </div>
         </TabsContent>
+        )}
 
-        {/* Categories Tab */}
-        <TabsContent value="categories" className="space-y-4">
+        {/* Categories Tab - Uniquement pour Admin et RH */}
+        {(isAdmin || isRH) && (
+          <TabsContent value="categories" className="space-y-4">
           <div className="stat-card overflow-hidden p-0">
             <div className="p-5 border-b border-border flex items-center justify-between">
               <div>
@@ -410,10 +441,85 @@ export default function AdminPanel() {
             )}
           </div>
         </TabsContent>
+        )}
 
-        {/* Signature Tab */}
+        {/* Signature Tab - Accessible à tous */}
         <TabsContent value="signature" className="space-y-4">
           <SignatureForm />
+        </TabsContent>
+
+        {/* Appearance Tab - Accessible à tous */}
+        <TabsContent value="appearance" className="space-y-4">
+          <div className="stat-card overflow-hidden p-0">
+            <div className="p-5 border-b border-border">
+              <h3 className="font-semibold">Personnaliser l'apparence</h3>
+              <p className="text-sm text-muted-foreground mt-0.5">
+                Choisissez un thème pour personnaliser les couleurs de l'interface
+              </p>
+            </div>
+            
+            <div className="p-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {themes.map((theme) => (
+                  <button
+                    key={theme.id}
+                    onClick={() => setTheme(theme.id)}
+                    className={`relative p-5 rounded-xl border-2 transition-all hover:shadow-lg ${
+                      currentTheme.id === theme.id
+                        ? "border-primary shadow-md"
+                        : "border-border hover:border-muted-foreground/30"
+                    }`}
+                  >
+                    {/* Badge de sélection */}
+                    {currentTheme.id === theme.id && (
+                      <div className="absolute top-3 right-3 w-6 h-6 bg-primary rounded-full flex items-center justify-center">
+                        <Check className="h-4 w-4 text-white" />
+                      </div>
+                    )}
+
+                    {/* Aperçu des couleurs */}
+                    <div className="flex gap-2 mb-4">
+                      <div className={`h-12 w-12 rounded-lg ${theme.colors.sidebarBg} shadow-sm`} />
+                      <div className="flex flex-col gap-1 flex-1">
+                        <div className={`h-[18px] rounded ${theme.colors.primary} shadow-sm`} />
+                        <div className={`h-[18px] rounded bg-gray-200 dark:bg-gray-700`} />
+                      </div>
+                    </div>
+
+                    {/* Informations du thème */}
+                    <div className="text-left">
+                      <h4 className="font-semibold text-sm mb-1">{theme.name}</h4>
+                      <p className="text-xs text-muted-foreground">
+                        {theme.description}
+                      </p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+
+              {/* Aperçu du thème actuel */}
+              <div className="mt-6 p-4 rounded-lg bg-muted/50 border border-border">
+                <h4 className="text-sm font-semibold mb-3 flex items-center gap-2">
+                  <Palette className="h-4 w-4" />
+                  Thème actuel : {currentTheme.name}
+                </h4>
+                <div className="flex flex-wrap gap-3">
+                  <div className="flex items-center gap-2">
+                    <div className={`w-8 h-8 rounded-lg ${currentTheme.colors.sidebarBg} shadow-sm`} />
+                    <span className="text-xs text-muted-foreground">Sidebar</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className={`w-8 h-8 rounded-lg ${currentTheme.colors.primary} shadow-sm`} />
+                    <span className="text-xs text-muted-foreground">Principal</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className={`w-8 h-8 rounded-lg ${currentTheme.colors.sidebarActiveBg} shadow-sm`} />
+                    <span className="text-xs text-muted-foreground">Actif</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
         </TabsContent>
       </Tabs>
 

@@ -10,7 +10,14 @@ import {
   AlertCircle,
   Plus,
   Zap,
+  ChevronDown,
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { motion } from "framer-motion";
 import { 
   AreaChart,
@@ -95,7 +102,7 @@ export default function Dashboard() {
       const courriers = await courrierService.getCourriers({
         ordering: "-created_at",
       });
-      setRecentCourriers(courriers.slice(0, 5));
+      setRecentCourriers(courriers.slice(0, 3));
     } catch (error) {
       console.error("Erreur lors du chargement des données:", error);
     } finally {
@@ -178,14 +185,33 @@ export default function Dashboard() {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button onClick={() => navigate("/courriers/nouveau")}>
-            <Plus className="h-4 w-4 mr-2" />
-            Nouveau courrier
-          </Button>
-          <Button variant="outline" onClick={() => navigate("/courriers")}>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button>
+                <Plus className="h-4 w-4 mr-2" />
+                Nouveau courrier
+                <ChevronDown className="h-4 w-4 ml-2" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => navigate("/courriers/nouveau?type=entrant")}>
+                <Inbox className="h-4 w-4 mr-2 text-blue-500" />
+                Courrier entrant
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => navigate("/courriers/nouveau?type=sortant")}>
+                <Send className="h-4 w-4 mr-2 text-emerald-500" />
+                Courrier sortant
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => navigate("/courriers/nouveau?type=interne")}>
+                <Mail className="h-4 w-4 mr-2 text-purple-500" />
+                Courrier interne
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          {/* <Button variant="outline" onClick={() => navigate("/courriers")}>
             <Mail className="h-4 w-4 mr-2" />
             Voir le registre
-          </Button>
+          </Button> */}
         </div>
       </motion.div>
 
@@ -352,7 +378,7 @@ export default function Dashboard() {
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => navigate("/courriers")}
+              onClick={() => navigate("/courriers/suivi")}
             >
               Tout
             </Button>
