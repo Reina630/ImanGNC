@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import imanLogo from "@/assets/logo-iman.png";
 import courrierService from "@/services/courrierService";
+import affectationService from "@/services/affectationService";
 
 /**
  * Menu principal pour le système de registre de courrier RH
@@ -28,14 +29,14 @@ import courrierService from "@/services/courrierService";
  */
 const userNav = [
   { title: "Tableau de bord", icon: LayoutDashboard, path: "/" },
-  { title: "Mes Courriers", icon: Inbox, path: "/mes-courriers" },
+  { title: "Mes Courriers", icon: Inbox, path: "/mes-courriers", showBadge: true },
   { title: "Documentation", icon: BookOpen, path: "/documentation" },
   { title: "Paramètres", icon: Settings, path: "/admin" },
 ];
 
 const dgNav = [
   { title: "Tableau de bord", icon: LayoutDashboard, path: "/" },
-  { title: "Mes Courriers", icon: Inbox, path: "/mes-courriers" },
+  { title: "Mes Courriers", icon: Inbox, path: "/mes-courriers", showBadge: true },
   { title: "Historique", icon: History, path: "/historique" },
   { title: "Documentation", icon: BookOpen, path: "/documentation" },
   { title: "Paramètres", icon: Settings, path: "/admin" },
@@ -43,7 +44,7 @@ const dgNav = [
 
 const rhAdminNav = [
   { title: "Tableau de bord", icon: LayoutDashboard, path: "/" },
-  { title: "Mes Courriers", icon: Inbox, path: "/mes-courriers" },
+  { title: "Mes Courriers", icon: Inbox, path: "/mes-courriers", showBadge: true },
   { title: "Suivi des Courriers", icon: TrendingUp, path: "/courriers/suivi" },
   { title: "Archives", icon: Archive, path: "/archives" },
   { title: "Historique", icon: History, path: "/historique" },
@@ -54,6 +55,7 @@ const rhAdminNav = [
 export default function AppSidebar() {
   const [collapsed, setCollapsed] = useState(false);
   const [urgentCount, setUrgentCount] = useState(0);
+  const [mesCourriersCount, setMesCourriersCount] = useState(0);
   const location = useLocation();
   const { user } = useAuth();
   const { currentTheme } = useTheme();
@@ -82,21 +84,29 @@ export default function AppSidebar() {
     };
   }, []);
 
-  // Charger le nombre de courriers urgents
+  // Charger le nombre de courriers urgents et mes courriers non traités
   useEffect(() => {
-    const loadUrgentCount = async () => {
+    const loadCounts = async () => {
       try {
+        // Compter les courriers urgents (pour référence future)
         const courriers = await courrierService.getCourriers({});
         const urgents = courriers.filter(c => c.urgent);
         setUrgentCount(urgents.length);
+
+        // Compter mes affectations non traitées
+        const [enAttente, enCours] = await Promise.all([
+          affectationService.getMesAffectationsEnAttente(),
+          affectationService.getMesAffectationsEnCours(),
+        ]);
+        setMesCourriersCount(enAttente.length + enCours.length);
       } catch (error) {
-        console.error("Erreur lors du chargement des courriers urgents:", error);
+        console.error("Erreur lors du chargement des compteurs:", error);
       }
     };
 
-    loadUrgentCount();
+    loadCounts();
     // Recharger toutes les 30 secondes
-    const interval = setInterval(loadUrgentCount, 30000);
+    const interval = setInterval(loadCounts, 30000);
     return () => clearInterval(interval);
   }, []);
 
@@ -124,17 +134,17 @@ export default function AppSidebar() {
         )}
       </div>
 
-      {/* Navigation */}
+      {/* Navigation items */}
       <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
         {mainNav.map((item) => (
           <NavLink key={item.path} to={item.path} className={linkClass(item.path)}>
             <item.icon className="h-[18px] w-[18px] shrink-0" />
             {!collapsed && <span className="flex-1">{item.title}</span>}
-            {/* {!collapsed && item.badge && urgentCount > 0 && (
-              <span className="px-2 py-0.5 text-xs font-semibold bg-amber-500 text-white rounded-full">
-                {urgentCount}
-              </span> 
-            )} */}
+            {!collapsed && item.showBadge && mesCourriersCount > 0 && (
+              <span className="px-2 py-0.5 text-xs font-semibold bg-blue-600 text-white rounded-full min-w-[20px] text-center">
+                {mesCourriersCount}
+              </span>
+            )}
           </NavLink>
         ))}
       </nav>

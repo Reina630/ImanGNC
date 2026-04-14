@@ -28,6 +28,8 @@ import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -113,6 +115,17 @@ export default function VoirCourrierUser() {
   const [actionLoading, setActionLoading] = useState(false);
   const [signatureDialogOpen, setSignatureDialogOpen] = useState(false);
   const [autoActionTriggered, setAutoActionTriggered] = useState(false);
+  const [renvoiDialogOpen, setRenvoiDialogOpen] = useState(false);
+  const [renvoiMotif, setRenvoiMotif] = useState("");
+  const [renvoiMotifLibre, setRenvoiMotifLibre] = useState("");
+
+  const MOTIFS_PREDEFINED = [
+    "Document incomplet",
+    "Mauvais destinataire",
+    "Informations incorrectes",
+    "Pièce jointe manquante",
+    "Nécessite une validation préalable",
+  ];
 
   useEffect(() => {
     if (id) {
@@ -225,27 +238,28 @@ export default function VoirCourrierUser() {
     return actionLabels[affectation.action_requise] || { label: "Traiter", icon: CheckCircle2 };
   };
 
-  const handleRenvoyer = async () => {
+  const handleRenvoyer = () => {
     if (!affectation) return;
+    setRenvoiMotif("");
+    setRenvoiMotifLibre("");
+    setRenvoiDialogOpen(true);
+  };
 
-    // Alerte de confirmation
-    const confirmed = window.confirm(
-      "⚠️ Attention !\n\nEn renvoyant ce courrier, vous n'y aurez plus accès par la suite.\n\nÊtes-vous sûr de vouloir continuer ?"
-    );
-
-    if (!confirmed) return;
+  const handleConfirmRenvoi = async () => {
+    if (!affectation) return;
+    const motifFinal = renvoiMotif === "__autre__" ? renvoiMotifLibre.trim() : renvoiMotif;
+    if (!motifFinal) return;
 
     try {
       setActionLoading(true);
-      
-      // Utiliser affectationService pour les affectations v2
+      setRenvoiDialogOpen(false);
+
       if (affectationId) {
-        await affectationService.renvoyer(affectation.id, "Renvoyé par l'utilisateur");
+        await affectationService.renvoyer(affectation.id, motifFinal);
       } else {
-        // Fallback pour l'ancien système
         await courrierService.renvoyerAffectation(affectation.id);
       }
-      
+
       toast({
         title: "Courrier renvoyé",
         description: "Le courrier a été renvoyé avec succès",
@@ -474,13 +488,36 @@ export default function VoirCourrierUser() {
               
               {/* Bouton Action requise - toujours visible pour permettre le traitement direct */}
               <Button
-                className="h-9 bg-green-600 hover:bg-green-700 text-white"
+                className="h-9 bg-green-600 hover:bg-green-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
                 onClick={handleActionRequise}
-                disabled={actionLoading}
+                disabled={
+                  actionLoading || 
+                  affectation.statut === 'signe' || 
+                  affectation.statut === 'valide' ||
+                  affectation.statut === 'rejete'
+                }
                 size="sm"
+                title={
+                  affectation.statut === 'signe' 
+                    ? "Ce document a déjà été signé" 
+                    : affectation.statut === 'valide'
+                    ? "Cette affectation a déjà été validée"
+                    : affectation.statut === 'rejete'
+                    ? "Cette affectation a été rejetée"
+                    : ""
+                }
               >
                 {React.createElement(getActionLabel().icon, { className: "h-4 w-4 mr-2" })}
-                {actionLoading ? "Traitement..." : getActionLabel().label}
+                {affectation.statut === 'signe' 
+                  ? "Déjà signé" 
+                  : affectation.statut === 'valide'
+                  ? "Déjà validé"
+                  : affectation.statut === 'rejete'
+                  ? "Rejeté"
+                  : actionLoading 
+                  ? "Traitement..." 
+                  : getActionLabel().label
+                }
               </Button>
 
               {/* Bouton Renvoyer */}
@@ -759,6 +796,80 @@ export default function VoirCourrierUser() {
           </motion.div>
         </div>
       </div>
+
+      {/* Dialog de renvoi */}
+      <Dialog open={renvoiDialogOpen} onOpenChange={setRenvoiDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Forward className="h-4 w-4 text-orange-500" />
+              Renvoyer le courrier
+            </DialogTitle>
+            <DialogDescription>
+              Sélectionnez un motif ou expliquez la raison du renvoi. En renvoyant ce courrier, vous n'y aurez plus accès.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3 py-2">
+            <Label className="text-sm font-medium">Motif du renvoi</Label>
+            <div className="space-y-2">
+              {MOTIFS_PREDEFINED.map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => setRenvoiMotif(m)}
+                  className={`w-full text-left text-sm px-3 py-2 rounded-lg border transition-colors ${
+                    renvoiMotif === m
+                      ? "border-orange-400 bg-orange-50 text-orange-800 font-medium"
+                      : "border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-slate-700"
+                  }`}
+                >
+                  {m}
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={() => setRenvoiMotif("__autre__")}
+                className={`w-full text-left text-sm px-3 py-2 rounded-lg border transition-colors ${
+                  renvoiMotif === "__autre__"
+                    ? "border-orange-400 bg-orange-50 text-orange-800 font-medium"
+                    : "border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-slate-700"
+                }`}
+              >
+                Autre motif…
+              </button>
+            </div>
+
+            {renvoiMotif === "__autre__" && (
+              <Textarea
+                autoFocus
+                placeholder="Décrivez le motif du renvoi…"
+                className="resize-none"
+                rows={3}
+                value={renvoiMotifLibre}
+                onChange={(e) => setRenvoiMotifLibre(e.target.value)}
+              />
+            )}
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setRenvoiDialogOpen(false)}>
+              Annuler
+            </Button>
+            <Button
+              onClick={handleConfirmRenvoi}
+              disabled={
+                !renvoiMotif ||
+                (renvoiMotif === "__autre__" && !renvoiMotifLibre.trim())
+              }
+              className="bg-orange-500 hover:bg-orange-600 text-white"
+            >
+              <Forward className="h-4 w-4 mr-2" />
+              Confirmer le renvoi
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Dialog de signature */}
       <SignatureDialog

@@ -40,7 +40,8 @@
  * @since 2026
  */
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
+import { usePolling } from "@/hooks/usePolling";
 import { motion } from "framer-motion";
 import {
   Zap,
@@ -89,24 +90,27 @@ export default function CourriersPrioritairesPage() {
   /**
    * Charger uniquement les courriers urgents
    */
-  const loadCourriersPrioritaires = async () => {
+  const loadCourriersPrioritaires = useCallback(async (silent = false) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       const allCourriers = await courrierService.getCourriers({});
       // Filtrer uniquement les courriers urgents
       const urgents = allCourriers.filter(c => c.urgent);
       setCourriers(urgents);
     } catch (error) {
       console.error("Erreur lors du chargement des courriers urgents:", error);
-      toast({
+      if (!silent) toast({
         variant: "destructive",
         title: "Erreur",
         description: "Impossible de charger les courriers urgents",
       });
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
-  };
+  }, []);
+
+  // Rafraîchissement automatique toutes les 20 secondes
+  usePolling(() => loadCourriersPrioritaires(true));
 
   /**
    * Retirer le marquage urgent d'un courrier

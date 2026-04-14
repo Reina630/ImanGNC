@@ -2,10 +2,11 @@ import api from './api';
 
 export interface Notification {
   id: number;
-  type: 'courrier_affecte' | 'document_partage' | 'commentaire' | 'tache' | 'system';
+  type: 'courrier_affecte' | 'courrier_renvoye' | 'courrier_urgent' | 'document_partage' | 'commentaire' | 'tache' | 'system';
   titre: string;
   message: string;
   lue: boolean;
+  urgente: boolean;
   courrier_id?: number;
   document_id?: number;
   created_at: string;
@@ -49,6 +50,21 @@ const notificationService = {
    */
   supprimerNotification: async (id: number): Promise<void> => {
     await api.delete(`/users/notifications/${id}/`);
+  },
+
+  /**
+   * Récupérer les alertes urgentes non lues (pour la bannière dashboard)
+   */
+  getAlertes: async (): Promise<Notification[]> => {
+    const response = await api.get('/users/alertes/');
+    return response.data;
+  },
+
+  /**
+   * Dismisser (marquer lue) une alerte urgente
+   */
+  dismisserAlerte: async (id: number): Promise<void> => {
+    await api.post(`/users/alertes/${id}/dismiss/`);
   },
 };
 

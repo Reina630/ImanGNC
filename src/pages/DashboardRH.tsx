@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
+import { usePolling } from "@/hooks/usePolling";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
@@ -101,15 +102,21 @@ export default function DashboardRH() {
     loadActivityLogs();
   }, []);
 
-  const loadDashboardData = async () => {
+  // Rafraîchissement automatique toutes les 20 secondes
+  usePolling(useCallback(() => {
+    loadDashboardData(true);
+    loadActivityLogs();
+  }, []));
+
+  const loadDashboardData = async (silent = false) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       const data = await courrierService.getStatistiques();
       setDashboardData(data);
     } catch (error) {
       console.error("Erreur chargement dashboard:", error);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 

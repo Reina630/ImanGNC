@@ -2,7 +2,8 @@
  * Page d'historique - Journal d'audit de toutes les activités
  */
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
+import { usePolling } from "@/hooks/usePolling";
 import { motion } from "framer-motion";
 import {
   History,
@@ -66,18 +67,21 @@ export default function HistoriquePage() {
     // Suppression du chargement des statistiques
   }, [isRHOrAdmin]);
 
-  const loadData = async () => {
+  const loadData = useCallback(async (silent = false) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       const data = await historiqueService.getActionLogs({ ordering: "-timestamp" });
       setActionLogs(data);
     } catch (error) {
       console.error("Erreur lors du chargement:", error);
-      toast.error("Erreur lors du chargement de l'historique");
+      if (!silent) toast.error("Erreur lors du chargement de l'historique");
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
-  };
+  }, []);
+
+  // Rafraîchissement automatique toutes les 20 secondes
+  usePolling(() => loadData(true));
 
 
 

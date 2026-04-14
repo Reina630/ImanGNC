@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Outlet } from "react-router-dom";
 import AppSidebar from "./AppSidebar";
 import TopBar from "./TopBar";
+import AlertesBanner from "@/components/AlertesBanner";
 
 export default function AppLayout() {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -23,6 +24,9 @@ export default function AppLayout() {
       {/* Main */}
       <div className="flex-1 flex flex-col min-w-0">
         <TopBar onMobileMenuToggle={() => setMobileOpen(!mobileOpen)} />
+        <div className="px-4 lg:px-6 pt-3">
+          <AlertesBanner />
+        </div>
         <main className="flex-1 p-4 lg:p-6 overflow-auto">
           <Outlet />
         </main>

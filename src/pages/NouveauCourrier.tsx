@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { useNavigate, useSearchParams, useLocation } from "react-router-dom";
-import { ArrowLeft, Upload, Send, Mail, Loader2, X, Camera, FileText, Inbox } from "lucide-react";
+import { ArrowLeft, Upload, Send, Mail, Loader2, X, Camera, FileText, Inbox, ZoomIn } from "lucide-react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -64,7 +64,24 @@ const NouveauCourrier = () => {
   
   const [selectedFiles, setSelectedFiles] = useState<File[]>(preloadedFile ? [preloadedFile] : []);
   const [scannerOpen, setScannerOpen] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewType, setPreviewType] = useState<'pdf' | 'image' | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Générer l'aperçu dès que le premier fichier change
+  useEffect(() => {
+    let url: string | null = null;
+    if (selectedFiles.length > 0) {
+      const f = selectedFiles[0];
+      url = URL.createObjectURL(f);
+      setPreviewUrl(url);
+      setPreviewType(f.type === 'application/pdf' ? 'pdf' : 'image');
+    } else {
+      setPreviewUrl(null);
+      setPreviewType(null);
+    }
+    return () => { if (url) URL.revokeObjectURL(url); };
+  }, [selectedFiles[0]?.name, selectedFiles[0]?.size]);
   
   // Charger les catégories depuis l'API (comme dans AdminPanel)
   const { data: categories = [], isLoading: categoriesLoading, error: categoriesError } = useCategories();
@@ -529,88 +546,145 @@ const NouveauCourrier = () => {
 
         {/* Sidebar */}
         <div className="space-y-6">
-          <Card>
+          <Card className="overflow-hidden">
             <CardHeader>
               <CardTitle className="text-base flex items-center gap-2">
                 <Upload className="h-4 w-4" />
                 {typeCourrier === "entrant" ? "Document" : "Document à envoyer"}
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-3">
-              {/* Liste des fichiers sélectionnés */}
-              {selectedFiles.length > 0 && (
-                <div className="space-y-2">
-                  {selectedFiles.map((file, index) => (
-                    <div key={`${file.name}-${index}`} className="border rounded-lg p-3 bg-slate-50">
-                      <div className="flex items-center gap-2">
-                        <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium truncate">{file.name}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {(file.size / 1024 / 1024).toFixed(2)} Mo
-                            {index === 0 && <span className="ml-1 text-primary">(principal)</span>}
-                          </p>
+            <CardContent className="space-y-3 p-0 pb-4">
+
+              {previewUrl && previewType ? (
+                /* ── MODE APERÇU : pleine hauteur ── */
+                <div className="flex flex-col">
+                  {/* Aperçu pleine hauteur */}
+                  <div className="w-full" style={{ height: "calc(100vh - 320px)", minHeight: 320 }}>
+                    {previewType === 'pdf' ? (
+                      <iframe
+                        src={previewUrl}
+                        className="w-full h-full"
+                        title="Aperçu du document"
+                      />
+                    ) : (
+                      <img
+                        src={previewUrl}
+                        alt="Aperçu"
+                        className="w-full h-full object-contain bg-slate-50"
+                      />
+                    )}
+                  </div>
+
+                  {/* Barre inférieure : nom + actions */}
+                  <div className="flex items-center gap-2 px-4 py-2 border-t border-slate-200 bg-white">
+                    <FileText className="h-4 w-4 text-slate-400 shrink-0" />
+                    <span className="text-xs text-slate-700 font-medium flex-1 truncate">
+                      {selectedFiles[0].name}
+                    </span>
+                    <span className="text-xs text-slate-400 shrink-0">
+                      {(selectedFiles[0].size / 1024 / 1024).toFixed(2)} Mo
+                    </span>
+                    {/* Ajouter d'autres fichiers */}
+                    <button
+                      type="button"
+                      className="text-xs text-primary hover:underline shrink-0 px-1"
+                      onClick={() => fileInputRef.current?.click()}
+                    >
+                      + Ajouter
+                    </button>
+                    {/* Changer le fichier principal */}
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      title="Supprimer et changer"
+                      className="h-6 w-6 shrink-0 text-slate-400 hover:text-red-500"
+                      onClick={() => setSelectedFiles(prev => prev.filter((_, i) => i !== 0))}
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </Button>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      className="hidden"
+                      multiple
+                      accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                      onChange={handleFileChange}
+                    />
+                  </div>
+
+                  {/* Pièces jointes supplémentaires */}
+                  {selectedFiles.length > 1 && (
+                    <div className="space-y-1 px-4 pt-2">
+                      {selectedFiles.slice(1).map((file, index) => (
+                        <div key={`${file.name}-${index}`} className="flex items-center gap-2 border rounded-lg px-3 py-1.5 bg-slate-50">
+                          <FileText className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-medium truncate">{file.name}</p>
+                            <p className="text-[10px] text-muted-foreground">{(file.size / 1024 / 1024).toFixed(2)} Mo</p>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 shrink-0"
+                            onClick={() => setSelectedFiles(prev => prev.filter((_, i) => i !== index + 1))}
+                          >
+                            <X className="h-3 w-3" />
+                          </Button>
                         </div>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 shrink-0"
-                          onClick={() => setSelectedFiles(prev => prev.filter((_, i) => i !== index))}
-                        >
-                          <X className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
+                      ))}
                     </div>
-                  ))}
+                  )}
+                </div>
+              ) : (
+                /* ── MODE VIDE : zone d'upload ── */
+                <div className="px-4 space-y-3">
+                  <div
+                    className="border-2 border-dashed rounded-lg p-6 text-center cursor-pointer hover:border-primary/50 hover:bg-slate-50 transition-colors"
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    <Upload className="h-7 w-7 mx-auto text-muted-foreground mb-2" />
+                    <p className="text-sm text-muted-foreground mb-1">Glisser les documents ici</p>
+                    <p className="text-xs text-muted-foreground mb-3">PDF, JPG, PNG (max 10 Mo par fichier)</p>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); fileInputRef.current?.click(); }}
+                    >
+                      Parcourir les fichiers
+                    </Button>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      className="hidden"
+                      multiple
+                      accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                      onChange={handleFileChange}
+                    />
+                  </div>
+
+                  <div className="relative">
+                    <div className="absolute inset-0 flex items-center">
+                      <span className="w-full border-t" />
+                    </div>
+                    <div className="relative flex justify-center text-xs uppercase">
+                      <span className="bg-background px-2 text-muted-foreground">Ou</span>
+                    </div>
+                  </div>
+
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    className="w-full"
+                    onClick={() => setScannerOpen(true)}
+                  >
+                    <Camera className="h-4 w-4 mr-2" />
+                    Scanner un document
+                  </Button>
                 </div>
               )}
-
-              {/* Zone d'ajout de fichiers */}
-              <div className="border-2 border-dashed rounded-lg p-4 text-center">
-                <Upload className="h-7 w-7 mx-auto text-muted-foreground mb-2" />
-                <p className="text-sm text-muted-foreground mb-1">
-                  {selectedFiles.length === 0 ? "Glisser les documents ici" : "Ajouter d'autres fichiers"}
-                </p>
-                <p className="text-xs text-muted-foreground mb-3">
-                  PDF, JPG, PNG (max 10 Mo par fichier)
-                </p>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                >
-                  Parcourir les fichiers
-                </Button>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  className="hidden"
-                  multiple
-                  accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
-                  onChange={handleFileChange}
-                />
-              </div>
-
-              <div className="relative">
-                <div className="absolute inset-0 flex items-center">
-                  <span className="w-full border-t" />
-                </div>
-                <div className="relative flex justify-center text-xs uppercase">
-                  <span className="bg-background px-2 text-muted-foreground">Ou</span>
-                </div>
-              </div>
-
-              <Button
-                type="button"
-                variant="secondary"
-                className="w-full"
-                onClick={() => setScannerOpen(true)}
-              >
-                <Camera className="h-4 w-4 mr-2" />
-                Scanner un document
-              </Button>
             </CardContent>
           </Card>
 

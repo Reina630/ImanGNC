@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
+import { usePolling } from "@/hooks/usePolling";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -69,9 +70,9 @@ export default function MesCourriers(): React.JSX.Element {
     applyFilters();
   }, [courriers, activeTab, searchQuery, serviceFilter, statutFilter]);
 
-  const loadCourriers = async () => {
+  const loadCourriers = useCallback(async (silent = false) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       const data = await affectationService.getAffectations({ mes_affectations: 1 });
 
       const userCourriers = data.map((item) => ({
@@ -93,15 +94,18 @@ export default function MesCourriers(): React.JSX.Element {
       setCourriers(userCourriers);
     } catch (error: any) {
       console.error("Erreur lors du chargement des courriers:", error);
-      toast({
+      if (!silent) toast({
         variant: "destructive",
         title: "Erreur",
         description: "Impossible de charger les courriers",
       });
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
-  };
+  }, []);
+
+  // Rafraîchissement automatique toutes les 20 secondes (sans spinner)
+  usePolling(() => loadCourriers(true));
 
   const getServiceIcon = (service: string) => {
     const icons: Record<string, JSX.Element> = {
@@ -200,6 +204,10 @@ export default function MesCourriers(): React.JSX.Element {
   const handleOuvrir = async (courrier: Courrier) => {
     try {
       await affectationService.marquerLu(courrier.id);
+      // Pour les informatifs, le backend auto-valide : on recharge la liste avant de naviguer
+      if (courrier.action_requise === "informatif") {
+        await loadCourriers(true);
+      }
       navigate(`/mes-courriers/traiter/${courrier.courrier_id}?affectation=${courrier.id}`);
     } catch (error) {
       toast({ variant: "destructive", title: "Erreur", description: "Impossible d'ouvrir ce courrier." });
@@ -249,7 +257,7 @@ export default function MesCourriers(): React.JSX.Element {
           className={btnPrimary}
         >
           <Eye className="h-4 w-4" />
-          Voir
+          {courrier.action_requise === "informatif" ? "Consulter" : "Voir"}
         </Button>
       );
     }

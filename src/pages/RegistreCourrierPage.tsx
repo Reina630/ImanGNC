@@ -1,6 +1,7 @@
 
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
+import { usePolling } from "@/hooks/usePolling";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
@@ -108,23 +109,27 @@ export default function RegistreCourrierPage() {
 
   /**
    * Charger tous les courriers (sans filtres)
+   * @param silent - si true, ne montre pas le spinner (rafraîchissement automatique)
    */
-  const loadCourriers = async () => {
+  const loadCourriers = useCallback(async (silent = false) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       const data = await courrierService.getCourriers({ ordering: "-created_at" });
       setAllCourriers(data);
     } catch (error) {
       console.error("Erreur lors du chargement des courriers:", error);
-      toast({
+      if (!silent) toast({
         variant: "destructive",
         title: "Erreur",
         description: "Impossible de charger les courriers",
       });
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
-  };
+  }, []);
+
+  // Rafraîchissement automatique toutes les 20 secondes (sans spinner)
+  usePolling(() => loadCourriers(true));
 
   /**
    * Appliquer les filtres côté frontend

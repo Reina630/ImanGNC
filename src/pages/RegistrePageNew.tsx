@@ -1274,39 +1274,18 @@ export default function RegistrePageNew() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                          <DropdownMenuItem 
+                          <DropdownMenuItem
                             className="gap-2"
-                            onClick={() => navigate(`/courriers/${courrier.id}`)}
+                            onClick={() => navigate(`/archives/${courrier.id}`)}
                           >
                             <Eye className="h-4 w-4" />
                             Voir détails
                           </DropdownMenuItem>
-                          <DropdownMenuItem className="gap-2">
-                            <Download className="h-4 w-4" />
-                            Télécharger
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem disabled className="gap-2 text-slate-400">
+                            <RotateCcw className="h-4 w-4" />
+                            Restaurer
                           </DropdownMenuItem>
-                          <DropdownMenuItem className="gap-2">
-                            <History className="h-4 w-4" />
-                            Historique
-                          </DropdownMenuItem>
-                          {courrier.nombre_versions && courrier.nombre_versions > 1 && (
-                            <DropdownMenuItem className="gap-2">
-                              <GitBranch className="h-4 w-4" />
-                              Versions ({courrier.nombre_versions})
-                            </DropdownMenuItem>
-                          )}
-                          {courrier.statut === 'archive' && (isRH || isAdmin) && (
-                            <>
-                              <DropdownMenuSeparator />
-                              <DropdownMenuItem 
-                                className="gap-2 text-blue-600"
-                                onClick={() => handleRestaurer(courrier)}
-                              >
-                                <RotateCcw className="h-4 w-4" />
-                                Restaurer
-                              </DropdownMenuItem>
-                            </>
-                          )}
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </div>
@@ -1462,39 +1441,18 @@ export default function RegistrePageNew() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            <DropdownMenuItem 
+                            <DropdownMenuItem
                               className="gap-2"
-                              onClick={() => navigate(`/courriers/${courrier.id}`)}
+                              onClick={() => navigate(`/archives/${courrier.id}`)}
                             >
                               <Eye className="h-4 w-4" />
                               Voir détails
                             </DropdownMenuItem>
-                            <DropdownMenuItem className="gap-2">
-                              <Download className="h-4 w-4" />
-                              Télécharger
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem disabled className="gap-2 text-slate-400">
+                              <RotateCcw className="h-4 w-4" />
+                              Restaurer
                             </DropdownMenuItem>
-                            <DropdownMenuItem className="gap-2">
-                              <History className="h-4 w-4" />
-                              Historique
-                            </DropdownMenuItem>
-                            {courrier.nombre_versions && courrier.nombre_versions > 1 && (
-                              <DropdownMenuItem className="gap-2">
-                                <GitBranch className="h-4 w-4" />
-                                Versions ({courrier.nombre_versions})
-                              </DropdownMenuItem>
-                            )}
-                            {courrier.statut === 'archive' && (isRH || isAdmin) && (
-                              <>
-                                <DropdownMenuSeparator />
-                                <DropdownMenuItem 
-                                  className="gap-2 text-blue-600"
-                                  onClick={() => handleRestaurer(courrier)}
-                                >
-                                  <RotateCcw className="h-4 w-4" />
-                                  Restaurer
-                                </DropdownMenuItem>
-                              </>
-                            )}
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </td>

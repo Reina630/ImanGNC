@@ -108,8 +108,10 @@ const courrierService = {
    * @param id - ID du courrier
    */
   getCourrierVersions: async (id: number): Promise<Courrier[]> => {
-    const response = await api.get<Courrier[]>(`/courriers/${id}/versions/`);
-    return response.data;
+    const response = await api.get<{ versions: Courrier[] } | Courrier[]>(`/courriers/${id}/versions/`);
+    // L'API peut retourner soit { versions: [...] } soit directement un tableau
+    const data = response.data as any;
+    return Array.isArray(data) ? data : (data.versions ?? []);
   },
 
   /**
