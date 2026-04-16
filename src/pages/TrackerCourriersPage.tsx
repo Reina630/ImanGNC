@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import courrierService from "@/services/courrierService";
+import { userService } from "@/services/userService";
 import type { Courrier } from "@/types";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -68,18 +69,7 @@ import { AffecterServiceDialog } from "@/components/AffecterServiceDialog";
 import { ModifierInfosAffectationDialog } from "@/components/dialogs/ModifierInfosAffectationDialog";
 
 
-const SERVICES = [
-  "Direction Générale",
-  "Ressources Humaines",
-  "Comptabilité",
-  "Direction Commerciale",
-  "Service Client",
-  "Marketing",
-  "Service Achats",
-  "Direction Technique",
-  "Direction Administrative",
-  "Secrétariat Direction",
-];
+
 
 export default function TrackerCourriersPage() {
   const [courriers, setCourriers] = useState<Courrier[]>([]);
@@ -88,6 +78,7 @@ export default function TrackerCourriersPage() {
   const [statutFilter, setStatutFilter] = useState<string>("all");
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [serviceFilter, setServiceFilter] = useState<string>("all");
+  const [services, setServices] = useState<{ id: number; nom: string }[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 5;
 
@@ -114,17 +105,23 @@ export default function TrackerCourriersPage() {
 
   useEffect(() => {
     let isMounted = true;
-    const fetchCourriers = async () => {
+    const fetchData = async () => {
       try {
-        const data = await courrierService.getCourriers({ statut: 'non_archive' });
-        if (isMounted) setCourriers(data);
+        const [courrierData, serviceData] = await Promise.all([
+          courrierService.getCourriers({ statut: 'non_archive' }),
+          userService.getServices(),
+        ]);
+        if (isMounted) {
+          setCourriers(courrierData);
+          setServices(serviceData);
+        }
       } catch {
-        if (isMounted) toast({ title: "Erreur", description: "Impossible de charger les courriers.", variant: "destructive" });
+        if (isMounted) toast({ title: "Erreur", description: "Impossible de charger les données.", variant: "destructive" });
       } finally {
         if (isMounted) setLoading(false);
       }
     };
-    fetchCourriers();
+    fetchData();
     return () => { isMounted = false; };
   }, []);
 
@@ -236,7 +233,8 @@ export default function TrackerCourriersPage() {
   const handleReaffecter = (courrier: Courrier) => handleAffecter(courrier);
 
   const handleAffectationPersonnalisee = (courrier: Courrier) => {
-    navigate(`/courriers/affecter/${courrier.id}`);
+    const hasAffectations = (courrier.affectations_v2 && courrier.affectations_v2.length > 0) || !!courrier.service_concerne_display;
+    navigate(`/courriers/affecter/${courrier.id}${hasAffectations ? '?mode=edit' : ''}`);
   };
 
   const handleRelancer = (courrier: Courrier) => {
@@ -589,9 +587,9 @@ export default function TrackerCourriersPage() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Tous les services</SelectItem>
-                {SERVICES.map((service) => (
-                  <SelectItem key={service} value={service}>
-                    {service}
+                {services.map((service) => (
+                  <SelectItem key={service.id} value={service.nom}>
+                    {service.nom}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -838,13 +836,13 @@ export default function TrackerCourriersPage() {
                                               onClick={() => handleAffecter(courrier)}
                                             >
                                               <Building2 className="h-4 w-4 mr-2" />
-                                              Affecter à un service
+                                              Changer le service concerné
                                             </DropdownMenuItem>
                                             <DropdownMenuItem
                                               onClick={() => handleAffectationPersonnalisee(courrier)}
                                             >
                                               <GitBranch className="h-4 w-4 mr-2" />
-                                              Affectation personnalisée
+                                              Ajouter une nouvelle affectation
                                             </DropdownMenuItem>
                                           </DropdownMenuSubContent>
                                         </DropdownMenuSub>
@@ -968,13 +966,13 @@ export default function TrackerCourriersPage() {
                                                 onClick={() => handleAffecter(courrier)}
                                               >
                                                 <Building2 className="h-4 w-4 mr-2" />
-                                                Affecter à un service
+                                                Changer le service concerné
                                               </DropdownMenuItem>
                                               <DropdownMenuItem
                                                 onClick={() => handleAffectationPersonnalisee(courrier)}
                                               >
                                                 <GitBranch className="h-4 w-4 mr-2" />
-                                                Affectation personnalisée
+                                                Ajouter une nouvelle affectation
                                               </DropdownMenuItem>
                                             </DropdownMenuSubContent>
                                           </DropdownMenuSub>

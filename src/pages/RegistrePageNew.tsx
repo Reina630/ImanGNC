@@ -335,6 +335,8 @@ export default function RegistrePageNew() {
   const [uploadOpen, setUploadOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [dragOver, setDragOver] = useState(false);
+  const [restaurerConfirm, setRestaurerConfirm] = useState<Courrier | null>(null);
+  const [isRestoring, setIsRestoring] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   // Filtres
@@ -352,6 +354,15 @@ export default function RegistrePageNew() {
   // Sidebar année/mois
   const [expandedYears, setExpandedYears] = useState<Set<string>>(new Set(["2026"]));
   const [selectedYearMonth, setSelectedYearMonth] = useState<YearMonth | null>(null);
+
+  // Extraire tous les services uniques
+  const allServices = useMemo(() => {
+    const servicesSet = new Set<string>();
+    allCourriers.forEach((c) => {
+      if (c.service_concerne_display) servicesSet.add(c.service_concerne_display);
+    });
+    return Array.from(servicesSet).sort();
+  }, [allCourriers]);
 
   // Extraire tous les contacts uniques
   const allContacts = useMemo(() => {
@@ -667,7 +678,7 @@ export default function RegistrePageNew() {
   };
 
   // Restaurer un courrier archivé (seulement RH/Admin)
-  const handleRestaurer = async (courrier: Courrier) => {
+  const handleRestaurer = (courrier: Courrier) => {
     if (!isRH && !isAdmin) {
       toast({
         variant: "destructive",
@@ -676,18 +687,21 @@ export default function RegistrePageNew() {
       });
       return;
     }
+    setRestaurerConfirm(courrier);
+  };
 
+  const confirmRestaurer = async () => {
+    if (!restaurerConfirm) return;
+    setIsRestoring(true);
     try {
-      await courrierService.changerStatut(courrier.id, "traite");
-      
-      // Recharger les courriers archivés
+      await courrierService.changerStatut(restaurerConfirm.id, "traite");
       const data = await courrierService.getArchivedCourriersByStatus();
       setAllCourriers(data);
-      
       toast({
         title: "Courrier restauré",
-        description: `Le courrier ${courrier.numero_registre} a été remis dans le flux actif`,
+        description: `Le courrier ${restaurerConfirm.numero_registre} a été remis dans le flux actif`,
       });
+      setRestaurerConfirm(null);
     } catch (error) {
       console.error("Erreur lors de la restauration:", error);
       toast({
@@ -695,6 +709,8 @@ export default function RegistrePageNew() {
         title: "Erreur",
         description: "Impossible de restaurer le courrier",
       });
+    } finally {
+      setIsRestoring(false);
     }
   };
 
@@ -1094,12 +1110,9 @@ export default function RegistrePageNew() {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="all">Tous les services</SelectItem>
-                        <SelectItem value="Ressources Humaines">Ressources Humaines</SelectItem>
-                        <SelectItem value="Comptabilité">Comptabilité</SelectItem>
-                        <SelectItem value="Informatique">Informatique</SelectItem>
-                        <SelectItem value="Direction Générale">Direction Générale</SelectItem>
-                        <SelectItem value="Achats">Achats</SelectItem>
-                        <SelectItem value="Service Client">Service Client</SelectItem>
+                        {allServices.map((s) => (
+                          <SelectItem key={s} value={s}>{s}</SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>
@@ -1282,7 +1295,10 @@ export default function RegistrePageNew() {
                             Voir détails
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
-                          <DropdownMenuItem disabled className="gap-2 text-slate-400">
+                          <DropdownMenuItem
+                            className="gap-2 text-blue-600 focus:text-blue-700"
+                            onClick={() => handleRestaurer(courrier)}
+                          >
                             <RotateCcw className="h-4 w-4" />
                             Restaurer
                           </DropdownMenuItem>
@@ -1449,7 +1465,10 @@ export default function RegistrePageNew() {
                               Voir détails
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
-                            <DropdownMenuItem disabled className="gap-2 text-slate-400">
+                            <DropdownMenuItem
+                              className="gap-2 text-blue-600 focus:text-blue-700"
+                              onClick={() => handleRestaurer(courrier)}
+                            >
                               <RotateCcw className="h-4 w-4" />
                               Restaurer
                             </DropdownMenuItem>
@@ -1467,6 +1486,35 @@ export default function RegistrePageNew() {
       </>
       )}
       
+      {/* Dialog confirmation restauration */}
+      <Dialog open={!!restaurerConfirm} onOpenChange={(open) => { if (!open) setRestaurerConfirm(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <RotateCcw className="h-5 w-5 text-blue-600" />
+              Restaurer le courrier
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-slate-600">
+            Voulez-vous restaurer le courrier{" "}
+            <span className="font-semibold">{restaurerConfirm?.numero_registre}</span> ?
+            Il sera remis dans le flux actif avec le statut « Traité ».
+          </p>
+          <div className="flex justify-end gap-2 mt-2">
+            <Button variant="outline" onClick={() => setRestaurerConfirm(null)} disabled={isRestoring}>
+              Annuler
+            </Button>
+            <Button
+              onClick={confirmRestaurer}
+              disabled={isRestoring}
+              className="bg-blue-600 hover:bg-blue-700 text-white"
+            >
+              {isRestoring ? "Restauration..." : "Confirmer la restauration"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* Dialog d'export Excel */}
       <ExportExcelDialog
         open={exportDialogOpen}

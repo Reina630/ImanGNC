@@ -231,6 +231,8 @@ export default function CourrierDetailsRHPage() {
   const [showAffecterDialog, setShowAffecterDialog] = useState(false);
   const [showAjouterPJDialog, setShowAjouterPJDialog] = useState(false);
   const [showModifierInfosDialog, setShowModifierInfosDialog] = useState(false);
+  const [showArchiverConfirm, setShowArchiverConfirm] = useState(false);
+  const [isArchiving, setIsArchiving] = useState(false);
   const [affectationToEdit, setAffectationToEdit] = useState<{
     id: number;
     service?: number | null;
@@ -316,7 +318,29 @@ export default function CourrierDetailsRHPage() {
     return <Icon className="h-4 w-4" />;
   };
 
-  const peutModifier = courrier && !['traite', 'archive'].includes(courrier.statut);
+  const handleArchiver = async () => {
+    if (!courrier) return;
+    setIsArchiving(true);
+    try {
+      await courrierService.changerStatut(courrier.id, 'archive');
+      queryClient.invalidateQueries({ queryKey: ['courrier', id] });
+      toast({
+        title: 'Courrier archivé',
+        description: `Le courrier ${courrier.numero_registre} a été archivé avec succès.`,
+      });
+      setShowArchiverConfirm(false);
+    } catch (error: any) {
+      toast({
+        title: 'Erreur',
+        description: error.response?.data?.error || "Impossible d'archiver le courrier.",
+        variant: 'destructive',
+      });
+    } finally {
+      setIsArchiving(false);
+    }
+  };
+
+  const peutModifier = courrier && courrier.statut !== 'archive';
 
   if (loadingCourrier) {
     return (
@@ -377,10 +401,26 @@ export default function CourrierDetailsRHPage() {
           )}
           {getStatutBadge(courrier.statut, courrier.statut_display)}
           
-          <Button onClick={() => {/* TODO: implémenter archivage */}} variant="outline" size="sm">
-            <Archive className="h-4 w-4 mr-2" />
-            Archiver
-          </Button>
+          {courrier.statut === 'archive' ? (
+            <Button variant="outline" size="sm" disabled className="opacity-60 cursor-not-allowed">
+              <Archive className="h-4 w-4 mr-2" />
+              Archivé
+            </Button>
+          ) : courrier.statut === 'traite' ? (
+            <Button
+              onClick={() => setShowArchiverConfirm(true)}
+              size="sm"
+              className="!bg-green-600 !hover:bg-green-700 !text-white !border-0"
+            >
+              <Archive className="h-4 w-4 mr-2" />
+              Archiver
+            </Button>
+          ) : (
+            <Button variant="outline" size="sm" disabled className="opacity-40 cursor-not-allowed">
+              <Archive className="h-4 w-4 mr-2" />
+              Archiver
+            </Button>
+          )}
         </div>
       </div>
 
@@ -510,16 +550,18 @@ export default function CourrierDetailsRHPage() {
                     </Button>
                     <Button
                       onClick={() => setShowAjouterPJDialog(true)}
+                      disabled={!peutModifier}
                       variant="outline"
-                      className="w-full justify-start bg-green-500 text-white hover:bg-green-600 hover:text-white"
+                      className="w-full justify-start bg-green-500 text-white hover:bg-green-600 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed"
                     >
                       <Paperclip className="h-4 w-4 mr-2" />
                       Ajouter une pièce jointe
                     </Button>
                     <Button
                       onClick={() => setShowAffecterDialog(true)}
+                      disabled={!peutModifier}
                       variant="outline"
-                      className="w-full justify-start bg-blue-500 text-white hover:bg-blue-600 hover:text-white"
+                      className="w-full justify-start bg-blue-500 text-white hover:bg-blue-600 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed"
                     >
                       <UserPlus className="h-4 w-4 mr-2" />
                       Nouvelle affectation
@@ -793,6 +835,7 @@ export default function CourrierDetailsRHPage() {
                                       size="sm"
                                       className="h-6 w-6 p-0 hover:bg-primary/10"
                                       title="Modifier l'affectation"
+                                      disabled={!peutModifier}
                                       onClick={() => {
                                         setAffectationToEdit({
                                           id: aff.id,
@@ -1027,6 +1070,34 @@ export default function CourrierDetailsRHPage() {
               setShowModifierInfosDialog(false);
             }}
           />
+
+          {/* Dialog confirmation archivage */}
+          <Dialog open={showArchiverConfirm} onOpenChange={setShowArchiverConfirm}>
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <Archive className="h-5 w-5 text-slate-600" />
+                  Archiver le courrier
+                </DialogTitle>
+                <DialogDescription>
+                  Voulez-vous archiver le courrier <span className="font-semibold">{courrier.numero_registre}</span> ?
+                  Il sera classé comme traité et archivé.
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setShowArchiverConfirm(false)} disabled={isArchiving}>
+                  Annuler
+                </Button>
+                <Button
+                  onClick={handleArchiver}
+                  disabled={isArchiving}
+                  className="bg-slate-700 hover:bg-slate-800 text-white"
+                >
+                  {isArchiving ? 'Archivage...' : 'Confirmer l\'archivage'}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </>
       )}
     </div>

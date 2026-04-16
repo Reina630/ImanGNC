@@ -239,6 +239,44 @@ const affectationService = {
     });
     return circuits.length > 0 ? circuits[0] : null;
   },
+
+  /**
+   * Ajouter des affectations à un circuit existant
+   * @param circuitId - ID du circuit existant
+   * @param affectations - Liste des nouvelles affectations à ajouter
+   */
+  ajouterAffectations: async (
+    circuitId: number,
+    affectations: Array<{
+      service: number;
+      destinataire?: number;
+      action_requise: string;
+      niveau_urgence: string;
+      etape_numero: number;
+      note_instruction?: string;
+      date_echeance?: string;
+    }>
+  ): Promise<CircuitV2> => {
+    const response = await api.post(
+      `/affectations/circuits/${circuitId}/ajouter_affectations/`,
+      { affectations }
+    );
+    return response.data;
+  },
+
+  /**
+   * Soumettre une réponse à un courrier (endpoint dédié, accessible aux utilisateurs normaux).
+   * @param affectationId - ID de l'affectation "a_repondre"
+   * @param formData      - FormData avec objet, destinataire, date_envoi, fichier, soumettre, etc.
+   */
+  soumettreReponse: async (affectationId: number, formData: FormData): Promise<import("@/types").Courrier> => {
+    const response = await api.post(
+      `/affectations/affectations/${affectationId}/soumettre_reponse/`,
+      formData,
+      { headers: { 'Content-Type': 'multipart/form-data' } }
+    );
+    return response.data;
+  },
 };
 
 export default affectationService;

@@ -56,6 +56,14 @@ export const userService = {
     const user = await this.getUser(id);
     return this.updateUser(id, { is_active: !user.is_active });
   },
+
+  /**
+   * Récupérer la liste des services
+   */
+  async getServices(): Promise<{ id: number; nom: string }[]> {
+    const response = await api.get<{ id: number; nom: string }[]>('/users/services/');
+    return response.data;
+  },
 };
 
 export default userService;

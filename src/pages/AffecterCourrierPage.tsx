@@ -4,13 +4,13 @@
  */
 
 import React, { useState, useEffect } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import affectationService from "@/services/affectationService";
 import serviceService, { type Service } from "@/services/serviceService";
 import userService from "@/services/userService";
 import courrierService from "@/services/courrierService";
-import type { Courrier, User, CircuitCreateData } from "@/types";
+import type { Courrier, User, CircuitCreateData, CircuitV2, AffectationV2 } from "@/types";
 import {
   ArrowLeft,
   Plus,
@@ -82,10 +82,15 @@ const SERVICE_ICONS: Record<string, { icon: string; color: string }> = {
 export default function AffecterCourrierPage() {
   const navigate = useNavigate();
   const { id } = useParams();
+  const [searchParams] = useSearchParams();
+  const modeEdit = searchParams.get('mode') === 'edit';
   const { toast } = useToast();
 
   const [modeSequentiel, setModeSequentiel] = useState(false);
   const [affectations, setAffectations] = useState<Affectation[]>([]);
+  const [affectationsExistantes, setAffectationsExistantes] = useState<AffectationV2[]>([]);
+  const [circuitExistant, setCircuitExistant] = useState<CircuitV2 | null>(null);
+  const [isLoadingCircuit, setIsLoadingCircuit] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [services, setServices] = useState<Service[]>([]);
   const [isLoadingServices, setIsLoadingServices] = useState(true);
@@ -135,6 +140,27 @@ export default function AffecterCourrierPage() {
 
     fetchCourrier();
   }, [id, toast, navigate]);
+
+  // Charger le circuit existant si mode edit
+  useEffect(() => {
+    if (!modeEdit || !id) return;
+    const fetchCircuit = async () => {
+      setIsLoadingCircuit(true);
+      try {
+        const circuit = await affectationService.getCircuitByCourrier(Number(id));
+        if (circuit) {
+          setCircuitExistant(circuit);
+          setAffectationsExistantes(circuit.affectations || []);
+          setModeSequentiel(circuit.type_circuit === 'sequentiel');
+        }
+      } catch (error) {
+        console.error('Erreur chargement circuit:', error);
+      } finally {
+        setIsLoadingCircuit(false);
+      }
+    };
+    fetchCircuit();
+  }, [modeEdit, id]);
 
   // Charger les services et utilisateurs au montage
   useEffect(() => {
@@ -238,33 +264,52 @@ export default function AffecterCourrierPage() {
     setIsLoading(true);
 
     try {
-      const circuitData: CircuitCreateData = {
-        courrier: Number(id),
-        type_circuit: modeSequentiel ? "sequentiel" : "simultane",
-        affectations: affectations.map((aff) => ({
-          service: aff.service,
-          destinataire: aff.destinataire, // optionnel, si absent = tous les users du service
-          action_requise: aff.action_requise,
-          niveau_urgence: aff.niveau_urgence,
-          etape_numero: aff.etape_numero,
-          date_echeance: aff.date_echeance,
-          note_instruction: aff.note_instruction,
-        })),
-      };
-
-      await affectationService.createCircuit(circuitData);
-
-      toast({
-        title: "✓ Circuit enregistré",
-        description: `${affectations.length} affectation(s) créée(s) avec succès`,
-      });
+      if (modeEdit && circuitExistant) {
+        // Mode édition : ajouter les nouvelles affectations au circuit existant
+        await affectationService.ajouterAffectations(
+          circuitExistant.id!,
+          affectations.map((aff) => ({
+            service: aff.service,
+            destinataire: aff.destinataire,
+            action_requise: aff.action_requise,
+            niveau_urgence: aff.niveau_urgence,
+            etape_numero: aff.etape_numero,
+            date_echeance: aff.date_echeance,
+            note_instruction: aff.note_instruction,
+          }))
+        );
+        toast({
+          title: "✓ Affectations ajoutées",
+          description: `${affectations.length} affectation(s) ajoutée(s) au circuit existant`,
+        });
+      } else {
+        // Mode création : créer un nouveau circuit
+        const circuitData: CircuitCreateData = {
+          courrier: Number(id),
+          type_circuit: modeSequentiel ? "sequentiel" : "simultane",
+          affectations: affectations.map((aff) => ({
+            service: aff.service,
+            destinataire: aff.destinataire,
+            action_requise: aff.action_requise,
+            niveau_urgence: aff.niveau_urgence,
+            etape_numero: aff.etape_numero,
+            date_echeance: aff.date_echeance,
+            note_instruction: aff.note_instruction,
+          })),
+        };
+        await affectationService.createCircuit(circuitData);
+        toast({
+          title: "✓ Circuit enregistré",
+          description: `${affectations.length} affectation(s) créée(s) avec succès`,
+        });
+      }
 
       setTimeout(() => navigate(-1), 800);
     } catch (error: any) {
-      console.error("Erreur lors de l'enregistrement du circuit:", error);
+      console.error("Erreur lors de l'enregistrement:", error);
       toast({
         title: "Erreur",
-        description: error.response?.data?.error || "Impossible d'enregistrer le circuit",
+        description: error.response?.data?.error || error.response?.data?.detail || "Impossible d'enregistrer",
         variant: "destructive",
       });
     } finally {
@@ -288,8 +333,8 @@ export default function AffecterCourrierPage() {
   const getAction = (value: string) => ACTIONS.find((a) => a.value === value);
   const getUrgence = (value: string) => URGENCES.find((u) => u.value === value);
 
-  // Afficher un indicateur de chargement si le courrier n'est pas encore chargé
-  if (isLoadingCourrier || !courrier) {
+  // Afficher un indicateur de chargement si le courrier ou le circuit n'est pas encore chargé
+  if (isLoadingCourrier || !courrier || (modeEdit && isLoadingCircuit)) {
     return (
       <div className="min-h-screen bg-[#f7f9fb] flex items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-[#800020]" />
@@ -309,10 +354,17 @@ export default function AffecterCourrierPage() {
             </Button>
             <div className="h-5 w-px bg-slate-300" />
             <div>
-              <h1 className="text-lg font-bold text-slate-900">Éditeur de circuit</h1>
+              <h1 className="text-lg font-bold text-slate-900">
+                {modeEdit ? "Modifier le circuit" : "Éditeur de circuit"}
+              </h1>
               <p className="text-xs text-slate-500">
                 {courrier.numero_registre} · {courrier.objet}
               </p>
+              {modeEdit && (
+                <p className="text-[10px] text-amber-600 font-medium mt-0.5">
+                  ✎ Ajout d'affectations au circuit existant
+                </p>
+              )}
             </div>
             {courrier.urgent && (
               <Badge className="bg-red-500 text-white text-[10px]">
@@ -334,7 +386,7 @@ export default function AffecterCourrierPage() {
             ) : (
               <>
                 <Save className="h-4 w-4" />
-                Enregistrer
+                {modeEdit ? "Ajouter les affectations" : "Enregistrer"}
               </>
             )}
           </Button>
@@ -403,6 +455,61 @@ export default function AffecterCourrierPage() {
                   )}
                 </Button>
               </div>
+
+              {/* Affectations existantes (mode edit) - lecture seule */}
+              {modeEdit && affectationsExistantes.length > 0 && (
+                <div className="mb-4">
+                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
+                    Affectations existantes ({affectationsExistantes.length})
+                  </p>
+                  <div className="space-y-2 opacity-60">
+                    {affectationsExistantes.map((aff) => {
+                      const serviceNom = (aff.service_detail as any)?.nom || 'Service inconnu';
+                      const serviceIcon = getServiceIcon(serviceNom);
+                      const action = getAction(aff.action_requise);
+                      const urgence = getUrgence(aff.niveau_urgence);
+                      const ActionIcon = action?.icon || Info;
+                      const destinataireNom = (aff.destinataire_detail as any)?.nom_complet || (aff.destinataire_detail as any)?.username;
+                      return (
+                        <div
+                          key={aff.id}
+                          className={`relative p-3 rounded-lg border border-dashed border-slate-300 ${serviceIcon.color} select-none`}
+                        >
+                          <div className="flex items-start gap-2">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className="text-base leading-none">{serviceIcon.icon}</span>
+                                <span className="text-sm font-semibold text-slate-700 truncate">{serviceNom}</span>
+                                {urgence && (
+                                  <Badge className={`${urgence.badge} text-white text-[10px] px-1.5 py-0 h-4 shrink-0`}>
+                                    {urgence.label}
+                                  </Badge>
+                                )}
+                                <Badge className="bg-slate-200 text-slate-600 text-[10px] px-1.5 py-0 h-4 shrink-0">
+                                  {aff.statut || 'distribué'}
+                                </Badge>
+                              </div>
+                              {destinataireNom ? (
+                                <p className="text-[10px] text-slate-500 mb-1">👤 {destinataireNom}</p>
+                              ) : (
+                                <p className="text-[10px] text-slate-500 mb-1 font-medium">👥 Tout le service</p>
+                              )}
+                              <div className="flex items-center gap-1.5 text-xs text-slate-500">
+                                <ActionIcon className={`h-3.5 w-3.5 ${action?.color} shrink-0`} />
+                                <span className="truncate">{action?.label}</span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div className="border-t border-dashed border-slate-300 mt-4 mb-2" />
+                  <p className="text-xs font-semibold text-[#800020] uppercase tracking-wide mb-2">
+                    Nouvelles affectations à ajouter
+                  </p>
+                </div>
+              )}
 
               {/* Étapes */}
               <div className="space-y-5">

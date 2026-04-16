@@ -1,5 +1,5 @@
 ﻿import { useState, useRef, useEffect, useCallback } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ArrowLeft,
@@ -41,9 +41,10 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import courrierService from "@/services/courrierService";
+import affectationService from "@/services/affectationService";
 import { useCategories } from "@/services/categoryHooks";
 import type { Courrier } from "@/types";
-import jsPDF from "jspdf";
+import { jsPDF } from "jspdf";
 import imanLogo from "@/assets/logo-iman.png";
 
 type Tab = "uploader" | "rediger";
@@ -71,6 +72,8 @@ function formatFileSize(bytes: number): string {
 
 export default function RepondreCourrierPage() {
   const { id } = useParams<{ id: string }>();
+  const [searchParams] = useSearchParams();
+  const affectationSourceId = searchParams.get("affectation");
   const navigate = useNavigate();
   const { toast } = useToast();
   const editorRef = useRef<HTMLDivElement>(null);
@@ -238,29 +241,42 @@ export default function RepondreCourrierPage() {
     setSaving(true);
     try {
       const formData = new FormData();
-      formData.append("type_courrier", "sortant");
       formData.append("objet", objet);
       formData.append("destinataire", destinataire);
       formData.append("date_envoi", dateEnvoi);
       formData.append("mode_envoi", modeEnvoi);
-      formData.append("statut", soumettre ? "en_traitement" : "brouillon");
-      if (message.trim()) formData.append("contenu_lettre", message);
-      if (courrierOriginal) formData.append("reponse_a", courrierOriginal.id.toString());
       if (categorie) formData.append("categorie", categorie);
       if (tab === "rediger") {
         const bodyHtml = editorRef.current?.innerHTML ?? "";
         formData.set("contenu_lettre", bodyHtml);
+      } else if (message.trim()) {
+        formData.append("contenu_lettre", message);
       }
       const fichier = tab === "rediger" ? await generateLetterFile() : uploadedFile!;
       formData.append("fichier", fichier);
-      const result = await courrierService.createCourrier(formData);
+
+      let result;
+      if (affectationSourceId) {
+        // Endpoint dédié — accessible aux utilisateurs normaux
+        formData.append("soumettre", soumettre ? "true" : "false");
+        result = await affectationService.soumettreReponse(parseInt(affectationSourceId), formData);
+      } else {
+        // Fallback (RH seulement)
+        formData.append("type_courrier", "sortant");
+        formData.append("statut", soumettre ? "en_traitement" : "brouillon");
+        if (courrierOriginal) formData.append("reponse_a", courrierOriginal.id.toString());
+        result = await courrierService.createCourrier(formData);
+      }
+
       toast({
         title: soumettre ? "Courrier soumis" : "Brouillon enregistré",
-        description: soumettre ? `Le courrier ${result.numero_registre} est en attente de traitement` : `Brouillon ${result.numero_registre} enregistré`,
+        description: soumettre
+          ? `Le courrier ${result.numero_registre} a été soumis pour validation`
+          : `Brouillon ${result.numero_registre} enregistré`,
       });
-      navigate("/courriers/suivi");
+      navigate("/mes-courriers");
     } catch (err: any) {
-      toast({ title: "Erreur", description: err?.response?.data?.message || err?.response?.data?.detail || "Impossible de créer le courrier", variant: "destructive" });
+      toast({ title: "Erreur", description: err?.response?.data?.detail || err?.response?.data?.message || "Impossible de créer le courrier", variant: "destructive" });
     } finally {
       setSaving(false);
     }
